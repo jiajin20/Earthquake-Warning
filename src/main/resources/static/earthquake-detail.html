@@ -610,6 +610,7 @@
     cdState.intervalId = setInterval(countdownTick, 1000);
   }
 
+  function getDotClass(level) {
     if (level >= 4) return 'dot-critical';
     if (level >= 3) return 'dot-moderate';
     if (level >= 2) return 'dot-light';
