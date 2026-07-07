@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>地震预警详情</title>
+<style>
+  :root { color-scheme: light; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    background: #f5f5f5;
+    color: #333;
+    -webkit-text-size-adjust: 100%;
+  }
+  .container { max-width: 480px; margin: 0 auto; padding: 16px; }
+
+  .card { background: #fff; border-radius: 16px; padding: 20px; margin-bottom: 16px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+  .header-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .alert-badge { font-size: 14px; font-weight: 600; padding: 4px 12px; border-radius: 20px; }
+  .badge-critical { background: #ff3b30; color: #fff; }
+  .badge-moderate { background: #ff9500; color: #fff; }
+  .badge-light { background: #ffcc00; color: #333; }
+  .badge-info { background: #e5e5ea; color: #666; }
+
+  .magnitude { font-size: 48px; font-weight: 700; line-height: 1; }
+  .magnitude .m-symbol { font-size: 24px; font-weight: 400; color: #999; }
+  .location { font-size: 22px; font-weight: 600; margin: 8px 0 4px; }
+  .sub-info { font-size: 14px; color: #888; }
+  .elapsed { font-size: 13px; color: #aaa; margin-top: 2px; }
+
+  .info-grid {
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 16px;
+    padding-top: 16px; border-top: 1px solid #f0f0f0;
+  }
+  .info-item { text-align: center; }
+  .info-item .label { font-size: 12px; color: #999; margin-bottom: 4px; }
+  .info-item .value { font-size: 18px; font-weight: 600; }
+
+  .city-card { background: #fff; border-radius: 16px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+  .city-header { padding: 16px 20px; font-size: 16px; font-weight: 600; border-bottom: 1px solid #f0f0f0; }
+  .city-item { display: flex; align-items: center; padding: 14px 20px; border-bottom: 1px solid #f8f8f8; }
+  .city-item:last-child { border-bottom: none; }
+  .city-dot {
+    width: 10px; height: 10px; border-radius: 50%; margin-right: 12px; flex-shrink: 0;
+  }
+  .dot-critical { background: #ff3b30; }
+  .dot-moderate { background: #ff9500; }
+  .dot-light { background: #ffcc00; }
+  .dot-info { background: #c7c7cc; }
+
+  .city-info { flex: 1; min-width: 0; }
+  .city-name { font-size: 16px; font-weight: 600; }
+  .city-meta { font-size: 13px; color: #888; margin-top: 2px; }
+  .city-level { font-size: 14px; font-weight: 500; text-align: right; }
+
+  /* 地震波倒计时 — 动态更新 */
+  .wave-row {
+    margin-top: 6px; padding: 8px 10px; background: #f8f8f8; border-radius: 8px;
+  }
+  .wave-item {
+    display: flex; align-items: center; gap: 6px; font-size: 14px; padding: 2px 0;
+  }
+  .wave-item .icon { font-size: 16px; }
+  .wave-label { color: #888; font-size: 13px; }
+
+  /* 倒计时数字 */
+  .cd-num { font-weight: 700; font-size: 16px; min-width: 40px; display: inline-block; }
+  .cd-warning { color: #ff9500; }
+  .cd-urgent { color: #ff3b30; animation: pulse 0.5s ease-in-out infinite alternate; }
+  .cd-arrived { color: #ff3b30; font-weight: 700; }
+  @keyframes pulse { from { opacity: 1; } to { opacity: 0.5; } }
+
+  .advice-card { background: #fff3cd; border-radius: 12px; padding: 14px 16px; margin-top: 16px; font-size: 15px; line-height: 1.6; }
+  .link-btn {
+    display: block; text-align: center; background: #007aff; color: #fff; text-decoration: none;
+    padding: 14px; border-radius: 12px; font-size: 16px; font-weight: 600; margin-top: 16px;
+  }
+  .link-btn:active { opacity: 0.8; }
+  .empty { text-align: center; padding: 60px 20px; color: #999; }
+  .empty .icon { font-size: 48px; margin-bottom: 16px; }
+
+  /* ========== 语音倒计时横幅 ========== */
+  .cd-banner {
+    background: #fff;
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 16px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    text-align: center;
+    display: none;
+    border-left: 4px solid #e5e5ea;
+  }
+  .cd-banner.level-info    { border-left-color: #c7c7cc; }
+  .cd-banner.level-light   { border-left-color: #ffcc00; }
+  .cd-banner.level-moderate { border-left-color: #ff9500; }
+  .cd-banner.level-critical { border-left-color: #ff3b30; }
+
+  .cd-banner-title {
+    font-size: 14px; color: #888; margin-bottom: 6px;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  .cd-number-display {
+    font-size: 80px; font-weight: 800; line-height: 1; margin: 8px 0;
+    color: #333; transition: color 0.3s;
+    font-variant-numeric: tabular-nums;
+  }
+  .cd-number-display.warning { color: #ff9500; }
+  .cd-number-display.urgent {
+    color: #ff3b30;
+    animation: cdPulseBig 0.6s ease-in-out infinite alternate;
+  }
+  .cd-number-display.arrived {
+    color: #ff3b30; font-size: 32px;
+  }
+  @keyframes cdPulseBig {
+    from { opacity: 1; transform: scale(1); }
+    to   { opacity: 0.6; transform: scale(1.06); }
+  }
+
+  .cd-beep-row {
+    font-size: 20px; color: #ccc; letter-spacing: 6px;
+    margin: 6px 0 14px; min-height: 28px;
+  }
+  .cd-beep-row.has-beep { color: #007aff; }
+
+  .cd-controls {
+    display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;
+  }
+  .cd-btn {
+    padding: 8px 18px; border: 1px solid #ddd; border-radius: 20px;
+    background: #fff; font-size: 14px; cursor: pointer; color: #555;
+    display: inline-flex; align-items: center; gap: 4px;
+    user-select: none; -webkit-tap-highlight-color: transparent;
+  }
+  .cd-btn:active { background: #f0f0f0; }
+  .cd-btn.on  { background: #007aff; color: #fff; border-color: #007aff; }
+  .cd-btn.off { color: #ff3b30; border-color: #ff3b30; }
+  .cd-btn.unlock {
+    color: #fff !important; background: #ff3b30 !important; border-color: #ff3b30 !important;
+    font-weight: 700; font-size: 16px; padding: 12px 28px;
+    animation: unlockPulse 1.2s ease-in-out infinite;
+  }
+  @keyframes unlockPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255,59,48,0.4); }
+    50%      { box-shadow: 0 0 0 12px rgba(255,59,48,0); }
+  }
+
+  /* ========== 声音解锁全屏遮罩 ========== */
+  .audio-unlock-overlay {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.82);
+    z-index: 9999;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    text-align: center;
+    padding: 40px 24px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    user-select: none;
+  }
+  .audio-unlock-overlay.show { display: flex; }
+  .audio-unlock-overlay .auo-icon {
+    font-size: 64px; margin-bottom: 20px;
+    animation: auoBounce 1s ease-in-out infinite;
+  }
+  .audio-unlock-overlay .auo-title {
+    font-size: 24px; font-weight: 700; margin-bottom: 12px;
+  }
+  .audio-unlock-overlay .auo-sub {
+    font-size: 15px; color: rgba(255,255,255,0.7); line-height: 1.6;
+  }
+  .audio-unlock-overlay .auo-countdown {
+    font-size: 56px; font-weight: 800; margin: 16px 0;
+    color: #ff9500; font-variant-numeric: tabular-nums;
+  }
+  .audio-unlock-overlay .auo-hint {
+    margin-top: 20px; font-size: 14px; color: rgba(255,255,255,0.6);
+    border: 1px solid rgba(255,255,255,0.3); border-radius: 24px;
+    padding: 10px 28px;
+    animation: auoPulse 1.2s ease-in-out infinite;
+  }
+  @keyframes auoBounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-12px); }
+  }
+  @keyframes auoPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0.3); }
+    50%      { box-shadow: 0 0 0 12px rgba(255,255,255,0); }
+  }
+</style>
+</head>
+<body>
+<div class="audio-unlock-overlay" id="audio-unlock-overlay">
+  <div class="auo-icon">🔊</div>
+  <div class="auo-title">点击屏幕开启声音预警</div>
+  <div class="auo-sub">地震波正在赶来<br>开启声音获取语音倒计时提醒</div>
+  <div class="auo-countdown" id="auo-countdown">--</div>
+  <div class="auo-hint">轻触任意位置即可开启</div>
+</div>
+<div class="container" id="app">
+  <div class="empty" id="empty">
+    <div class="icon">🌍</div>
+    <div>请从地震预警通知中点击查看详情</div>
+  </div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  // 存储所有倒计时目标时间戳（毫秒），供定时器更新
+  var timerTargets = [];
+  var timerData = null;  // 原始数据引用
+
+  // ========== 语音倒计时系统 ==========
+  var cdState = {
+    active: false, muted: true, paused: false,
+    currentSec: 0, maxLevel: 0, intervalId: null, audioCtx: null,
+    audioUnlocked: false  // 浏览器音频策略：需要用户手势才能解锁
+  };
+
+  /** 用户点击后解锁 AudioContext + SpeechSynthesis（必须由用户手势触发） */
+  function unlockAudio() {
+    if (cdState.audioUnlocked) {
+      console.log('[CD] Audio already unlocked, skipping.');
+      return true;
+    }
+
+    console.log('[CD] Unlocking audio...');
+    try {
+      // 1. 创建/恢复 AudioContext（必须在用户手势中同步调用）
+      if (!cdState.audioCtx) {
+        cdState.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        console.log('[CD] AudioContext created, state:', cdState.audioCtx.state);
+      }
+      if (cdState.audioCtx.state === 'suspended') {
+        // resume() 返回 Promise，在用户手势上下文中调用通常会立即生效
+        cdState.audioCtx.resume().then(function() {
+          console.log('[CD] AudioContext resumed, state:', cdState.audioCtx.state);
+        }).catch(function(err) {
+          console.warn('[CD] AudioContext resume failed:', err);
+        });
+      }
+
+      // 2. 解锁 SpeechSynthesis：加载 voices + 发一条空语音
+      var voices = speechSynthesis.getVoices();
+      console.log('[CD] SpeechSynthesis voices loaded:', voices.length);
+      if (voices.length === 0) {
+        // 部分浏览器首次 getVoices() 返回空，监听 voiceschanged 事件
+        speechSynthesis.addEventListener('voiceschanged', function onVoices() {
+          console.log('[CD] Voices changed, now:', speechSynthesis.getVoices().length);
+          speechSynthesis.removeEventListener('voiceschanged', onVoices);
+        }, { once: true });
+      }
+
+      // 发一条无声 utterance 完成解锁
+      speechSynthesis.cancel();
+      var u = new SpeechSynthesisUtterance('');
+      u.volume = 0;
+      u.rate = 2;
+      speechSynthesis.speak(u);
+      console.log('[CD] SpeechSynthesis unlock utterance sent.');
+
+      cdState.audioUnlocked = true;
+      cdState.muted = false;
+
+      // 隐藏全屏解锁遮罩
+      var overlay = document.getElementById('audio-unlock-overlay');
+      if (overlay) { overlay.classList.remove('show'); }
+
+      // 更新按钮状态
+      var muteBtn = document.getElementById('cd-btn-mute');
+      if (muteBtn) { muteBtn.textContent = '🔊 有声'; muteBtn.className = 'cd-btn on'; }
+
+      // 更新 beep 行 — 恢复默认样式
+      var beepRow = document.getElementById('cd-beep-row');
+      if (beepRow) {
+        var label = getBeepLabel(cdState.maxLevel);
+        beepRow.textContent = label || '';
+        beepRow.className = label ? 'cd-beep-row has-beep' : 'cd-beep-row';
+        beepRow.style.cssText = '';
+      }
+
+      console.log('[CD] Audio unlocked successfully! muted=' + cdState.muted + ', level=' + cdState.maxLevel);
+      return true;
+    } catch(e) {
+      console.warn('[CD] Audio unlock failed:', e);
+      return false;
+    }
+  }
+
+  function getAudioCtx() {
+    if (!cdState.audioCtx) {
+      cdState.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    // 常规恢复（用户手势之后可能还会被暂停，如页面切换 Tab 后）
+    if (cdState.audioCtx.state === 'suspended') {
+      cdState.audioCtx.resume();
+    }
+    return cdState.audioCtx;
+  }
+
+  /** 播放一次"滴"声 (1000Hz 正弦波, 120ms) —— 仅在音频解锁后播放 */
+  function playBeep() {
+    if (!cdState.audioUnlocked) { console.log('[CD] playBeep skipped: audio not unlocked'); return; }
+    try {
+      var ctx = getAudioCtx();
+      if (ctx.state === 'closed') return;
+      // 如果 context 又被暂停了（如切 Tab 后回来），尝试恢复
+      if (ctx.state === 'suspended') {
+        console.log('[CD] AudioContext suspended, trying resume...');
+        ctx.resume();
+      }
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = 1000;
+      osc.type = 'sine';
+      gain.gain.setValueAtTime(0.25, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.12);
+      console.log('[CD] Beep played, ctx.state=' + ctx.state);
+    } catch(e) { console.warn('[CD] playBeep error:', e); }
+  }
+
+  /** 语音播报文字（中文） —— 仅在音频解锁后播放 */
+  function speakCD(text) {
+    if (!cdState.audioUnlocked) { console.log('[CD] speakCD skipped: audio not unlocked'); return; }
+    try {
+      speechSynthesis.cancel();  // 取消之前的语音，避免堆积
+      var u = new SpeechSynthesisUtterance(String(text));
+      u.lang = 'zh-CN';
+      u.rate = 1.15;
+      u.pitch = 1.0;
+      u.volume = 1.0;
+      u.onstart = function() { console.log('[CD] Speech started:', text); };
+      u.onerror = function(e) { console.warn('[CD] Speech error:', e.error, text); };
+      u.onend = function() { console.log('[CD] Speech ended:', text); };
+      speechSynthesis.speak(u);
+      console.log('[CD] speakCD queued:', text);
+    } catch(e) { console.warn('[CD] speakCD error:', e); }
+  }
+
+  /** 根据等级返回 beep 提示文字 */
+  function getBeepLabel(level) {
+    if (level >= 4) return '滴滴 '.repeat(5).trim();
+    if (level >= 2) return '滴 '.repeat(5).trim();
+    return '';
+  }
+
+  function getBannerLevelClass(level) {
+    if (level >= 4) return 'level-critical';
+    if (level >= 3) return 'level-moderate';
+    if (level >= 2) return 'level-light';
+    return 'level-info';
+  }
+
+  function getCdDisplayClass(sec) {
+    if (sec <= 0)  return 'arrived';
+    if (sec <= 15) return 'urgent';
+    if (sec <= 60) return 'warning';
+    return '';
+  }
+
+  /** 每秒触发一次：更新视觉 + 播放语音/滴声 */
+  function countdownTick() {
+    if (!cdState.active || cdState.paused) return;
+
+    var sec = cdState.currentSec;
+    var display = document.getElementById('cd-number');
+    var beepRow = document.getElementById('cd-beep-row');
+
+    if (sec <= 0) {
+      // 倒计时结束
+      stopVoiceCountdown();
+      // 关闭全屏遮罩（无论是否解锁过声音）
+      var overlayEnd = document.getElementById('audio-unlock-overlay');
+      if (overlayEnd) overlayEnd.classList.remove('show');
+      if (display) {
+        display.textContent = '已到达!';
+        display.className = 'cd-number-display arrived';
+      }
+      if (beepRow) beepRow.textContent = '';
+      if (!cdState.muted) {
+        console.log('[CD] Countdown ended, speaking arrival message...');
+        speakCD('地震波已到达，请注意避险');
+      }
+      return;
+    }
+
+    // 1. 更新视觉显示
+    if (display) {
+      display.textContent = sec;
+      display.className = 'cd-number-display ' + getCdDisplayClass(sec);
+    }
+    // 同步更新遮罩上的倒计时数字
+    var auoCd = document.getElementById('auo-countdown');
+    if (auoCd && auoCd.offsetParent !== null) { auoCd.textContent = sec; }
+
+    // 2. 音频：滴声 + 语音报数
+    if (!cdState.muted) {
+      var level = cdState.maxLevel;
+      console.log('[CD] Tick ' + sec + ', muted=false, level=' + level + ', unlocked=' + cdState.audioUnlocked);
+
+      if (level >= 4) {
+        // 破坏性地震：两声"滴滴"
+        playBeep();
+        setTimeout(function() { playBeep(); }, 180);
+        setTimeout(function() { speakCD(sec); }, 400);
+      } else if (level >= 2) {
+        // 有感地震：一声"滴"
+        playBeep();
+        setTimeout(function() { speakCD(sec); }, 200);
+      } else {
+        // 几乎无感：纯数字
+        speakCD(sec);
+      }
+    } else {
+      console.log('[CD] Tick ' + sec + ', muted=true — audio skipped');
+    }
+
+    cdState.currentSec--;
+  }
+
+  function stopVoiceCountdown() {
+    cdState.active = false;
+    if (cdState.intervalId) {
+      clearInterval(cdState.intervalId);
+      cdState.intervalId = null;
+    }
+    // 重置播放按钮
+    var btn = document.getElementById('cd-btn-play');
+    if (btn) { btn.textContent = '▶️ 播放'; btn.className = 'cd-btn'; }
+  }
+
+  /** 播放 / 暂停切换 */
+  function togglePauseCD() {
+    cdState.paused = !cdState.paused;
+    var btn = document.getElementById('cd-btn-play');
+    if (!btn) return;
+    if (cdState.paused) {
+      btn.textContent = '▶️ 继续';
+      btn.className = 'cd-btn on';
+    } else {
+      btn.textContent = '⏸️ 暂停';
+      btn.className = 'cd-btn';
+      // 如果 AudioContext 被暂停，恢复它
+      if (cdState.audioCtx && cdState.audioCtx.state === 'suspended') {
+        cdState.audioCtx.resume();
+      }
+    }
+  }
+
+  /** 静音 / 有声切换 */
+  function toggleMuteCD() {
+    if (!cdState.audioUnlocked) {
+      unlockAudio();
+      return;
+    }
+    cdState.muted = !cdState.muted;
+    var btn = document.getElementById('cd-btn-mute');
+    if (!btn) return;
+    if (cdState.muted) {
+      btn.textContent = '🔇 已静音';
+      btn.className = 'cd-btn off';
+      speechSynthesis.cancel();
+    } else {
+      btn.textContent = '🔊 有声';
+      btn.className = 'cd-btn on';
+      // 恢复 AudioContext
+      if (cdState.audioCtx && cdState.audioCtx.state === 'suspended') {
+        cdState.audioCtx.resume();
+      }
+    }
+  }
+
+  /** 启动语音倒计时：找到影响最大的城市的 S 波剩余秒数 */
+  function startVoiceCountdown() {
+    var data = timerData;
+    if (!data) return;
+    var cities = data.cities || [];
+    if (cities.length === 0) return;
+
+    var eqTs = parseEqTime(data.time);
+    if (isNaN(eqTs)) return;
+
+    var maxLevel = getMaxLevel(cities);
+    cdState.maxLevel = maxLevel;
+
+    // 找到有 S 波数据且影响等级最高的城市
+    var bestCity = null;
+    for (var i = 0; i < cities.length; i++) {
+      if (cities[i].sWave > 0 && (!bestCity || cities[i].level > bestCity.level)) {
+        bestCity = cities[i];
+      }
+    }
+    if (!bestCity) return;
+
+    var sArrival = eqTs + bestCity.sWave * 1000;
+    var remaining = Math.ceil((sArrival - Date.now()) / 1000);
+
+    // S 波已到达，不启动倒计时
+    if (remaining <= 0) {
+      var banner = document.getElementById('cd-banner');
+      if (banner) { banner.style.display = 'block'; banner.className = 'cd-banner ' + getBannerLevelClass(maxLevel); }
+      var display = document.getElementById('cd-number');
+      if (display) { display.textContent = '已到达!'; display.className = 'cd-number-display arrived'; }
+      var beepRow = document.getElementById('cd-beep-row');
+      if (beepRow) beepRow.textContent = '';
+      return;
+    }
+
+    cdState.currentSec = remaining;
+    cdState.active = true;
+    cdState.paused = false;
+    cdState.muted = true;        // 浏览器策略：初始必须静音，等待用户手势解锁
+    cdState.audioUnlocked = false;
+
+    // 显示横幅
+    var banner = document.getElementById('cd-banner');
+    if (banner) {
+      banner.style.display = 'block';
+      banner.className = 'cd-banner ' + getBannerLevelClass(maxLevel);
+    }
+
+    // 等级文字
+    var levelEl = document.getElementById('cd-level-text');
+    if (levelEl) {
+      var map = {0:'几乎无感', 1:'几乎无感', 2:'有感地震', 3:'有感地震', 4:'破坏性地震', 5:'破坏性地震'};
+      levelEl.textContent = '· ' + (map[maxLevel] || '');
+    }
+
+    // beep 提示行 — 初始静音时显示解锁提示
+    var beepRow = document.getElementById('cd-beep-row');
+    if (beepRow) {
+      beepRow.textContent = '🔇 点击下方按钮启用声音';
+      beepRow.className = 'cd-beep-row';
+      beepRow.style.color = '#ff9500';
+      beepRow.style.fontSize = '14px';
+      beepRow.style.letterSpacing = '0';
+      beepRow.style.fontWeight = '600';
+    }
+
+    // 数字显示
+    var display = document.getElementById('cd-number');
+    if (display) {
+      display.textContent = remaining;
+      display.className = 'cd-number-display ' + getCdDisplayClass(remaining);
+    }
+
+    // 按钮状态 — 初始静音，提示用户点击解锁
+    var playBtn = document.getElementById('cd-btn-play');
+    var muteBtn = document.getElementById('cd-btn-mute');
+    if (playBtn) { playBtn.textContent = '⏸️ 暂停'; playBtn.className = 'cd-btn'; }
+    if (muteBtn) { muteBtn.textContent = '🔊 点击启用声音'; muteBtn.className = 'cd-btn unlock'; }
+
+    // 绑定按钮事件 — 使用闭包防止重复绑定
+    (function bindButtons() {
+      var playBtn = document.getElementById('cd-btn-play');
+      var muteBtn = document.getElementById('cd-btn-mute');
+      if (playBtn && !playBtn._bound) {
+        playBtn._bound = true;
+        playBtn.addEventListener('click', togglePauseCD);
+      }
+      if (muteBtn && !muteBtn._bound) {
+        muteBtn._bound = true;
+        muteBtn.addEventListener('click', function(e) {
+          if (!cdState.audioUnlocked) {
+            console.log('[CD] Unlocking audio via mute button...');
+            unlockAudio();
+            return;
+          }
+          toggleMuteCD();
+        });
+      }
+    })();
+
+    // === 显示全屏遮罩，引导用户轻触屏幕解锁声音 ===
+    var overlay = document.getElementById('audio-unlock-overlay');
+    if (overlay) {
+      var auoCd = document.getElementById('auo-countdown');
+      if (auoCd) auoCd.textContent = remaining;
+      overlay.classList.add('show');
+
+      // 监听整个 document 的第一次 touchend/click —— 轻触任意位置即解锁
+      var unlockHandler = function(e) {
+        console.log('[CD] User gesture detected:', e.type, '— unlocking audio...');
+        unlockAudio();
+        // 移除监听器（once 模式手动实现，兼容旧浏览器）
+        document.removeEventListener('touchend', unlockHandler, true);
+        document.removeEventListener('click', unlockHandler, true);
+        e.preventDefault();
+        e.stopPropagation();
+      };
+      // capture: true 确保最先捕获，在所有其他 handler 之前
+      document.addEventListener('touchend', unlockHandler, { capture: true, once: true });
+      document.addEventListener('click', unlockHandler, { capture: true, once: true });
+    }
+
+    // 清除旧 interval，立即执行第一次 + 启动定时器（避免初始 1 秒停顿）
+    if (cdState.intervalId) clearInterval(cdState.intervalId);
+    countdownTick();
+    cdState.intervalId = setInterval(countdownTick, 1000);
+  }
+
+  // 启动语音倒计时
+    if (level >= 4) return 'dot-critical';
+    if (level >= 3) return 'dot-moderate';
+    if (level >= 2) return 'dot-light';
+    return 'dot-info';
+  }
+
+  function getBadgeClass(level) {
+    if (level >= 4) return 'badge-critical';
+    if (level >= 3) return 'badge-moderate';
+    if (level >= 2) return 'badge-light';
+    return 'badge-info';
+  }
+
+  function getBadgeText(level) {
+    if (level >= 5) return '严重';
+    if (level >= 4) return '重度';
+    if (level >= 3) return '中等';
+    if (level >= 2) return '轻微';
+    return '无感';
+  }
+
+  function getMaxLevel(cities) {
+    if (!cities || cities.length === 0) return 0;
+    return Math.max.apply(null, cities.map(function(c) { return c.level || 0; }));
+  }
+
+  /**
+   * 重绘概览卡片中已过去时间的文字
+   */
+  function updateElapsed() {
+    var el = document.getElementById('elapsed-text');
+    if (!el || !timerData) return;
+    var eqTs = parseEqTime(timerData.time);
+    if (isNaN(eqTs)) { el.textContent = ''; return; }
+    var sec = Math.floor((Date.now() - eqTs) / 1000);
+    if (sec < 0) sec = 0;
+    el.textContent = '已过去 ' + sec + ' 秒';
+  }
+
+  /**
+   * 更新所有城市的 P/S 波倒计时
+   */
+  function updateCountdown() {
+    var now = Date.now();
+    var anyActive = false;
+    for (var i = 0; i < timerTargets.length; i++) {
+      var t = timerTargets[i];
+      var el = document.getElementById(t.id);
+      var remaining = t.arrival - now;
+      var sec = Math.ceil(remaining / 1000);
+      if (el) {
+        if (sec <= 0) {
+          el.innerHTML = '<span class="cd-arrived">已到达！</span>';
+          t.done = true;
+        } else {
+          var cls = sec <= 15 ? 'cd-urgent' : sec <= 60 ? 'cd-warning' : '';
+          el.innerHTML = '<span class="cd-num ' + cls + '">' + sec + '</span>秒后到达';
+          anyActive = true;
+        }
+      }
+    }
+    // 更新已过去时间
+    updateElapsed();
+    // 所有波都到达后降频到 2s
+    if (!anyActive) {
+      clearInterval(window._cdInterval);
+      window._cdInterval = setInterval(updateCountdown, 2000);
+    }
+  }
+
+  function parseEqTime(timeStr) {
+    if (!timeStr) return NaN;
+    // "2026-07-06 07:10:27" → 兼容 Safari
+    var iso = timeStr.replace(' ', 'T') + '+08:00';
+    return new Date(iso).getTime();
+  }
+
+  function render(data) {
+    timerData = data;
+    timerTargets = [];
+    var cities = data.cities || [];
+    var maxLevel = getMaxLevel(cities);
+    var reportTypeText = data.reportType === 'automatic' ? '自动测定' : '正式测定';
+    var reportTypeEmoji = data.reportType === 'automatic' ? '📡' : '✅';
+    var badgeClass = getBadgeClass(maxLevel);
+    var badgeText = getBadgeText(maxLevel);
+    var eqTs = parseEqTime(data.time);
+
+    var html = '';
+
+    // === 概览卡片 ===
+    html += '<div class="card">';
+    html += '<div class="header-row">';
+    html += '<span class="alert-badge ' + badgeClass + '">' + badgeText + '</span>';
+    html += '<span style="font-size:13px;color:#888">' + reportTypeEmoji + ' ' + reportTypeText + '</span>';
+    html += '</div>';
+    html += '<div class="magnitude"><span class="m-symbol">M</span>' + data.magnitude + '</div>';
+    html += '<div class="location">' + data.location + '</div>';
+    html += '<div class="sub-info">' + data.time + '</div>';
+    html += '<div class="elapsed" id="elapsed-text">--</div>';
+    html += '<div class="info-grid">';
+    html += '<div class="info-item"><div class="label">深度</div><div class="value">' + data.depth + 'km</div></div>';
+    html += '<div class="info-item"><div class="label">震级</div><div class="value">M' + data.magnitude + '</div></div>';
+    html += '<div class="info-item"><div class="label">最大烈度</div><div class="value">' + getBadgeText(maxLevel) + '</div></div>';
+    html += '</div></div>';
+
+    // === 语音倒计时横幅（由 startVoiceCountdown 激活） ===
+    html += '<div class="cd-banner" id="cd-banner">';
+    html += '<div class="cd-banner-title">⏱ S波到达倒计时 <span id="cd-level-text" style="font-weight:600"></span></div>';
+    html += '<div class="cd-number-display" id="cd-number">--</div>';
+    html += '<div class="cd-beep-row" id="cd-beep-row"></div>';
+    html += '<div class="cd-controls">';
+    html += '<button class="cd-btn" id="cd-btn-play">⏸️ 暂停</button>';
+    html += '<button class="cd-btn" id="cd-btn-mute">🔊 有声</button>';
+    html += '</div>';
+    html += '</div>';
+
+    // === 城市列表（动态倒计时） ===
+    if (cities.length > 0) {
+      html += '<div class="city-card">';
+      html += '<div class="city-header">📊 各地影响预估</div>';
+      for (var i = 0; i < cities.length; i++) {
+        var c = cities[i];
+        html += '<div class="city-item">';
+        html += '<div class="city-dot ' + getDotClass(c.level) + '"></div>';
+        html += '<div class="city-info">';
+        html += '<div class="city-name">' + c.name + '</div>';
+        html += '<div class="city-meta">距震中 ' + Math.round(c.distance) + 'km · 烈度 ' + Number(c.intensity).toFixed(1) + '</div>';
+
+        // 只渲染有有效波数据的城市
+        if (c.sWave > 0 || c.pWave > 0) {
+          html += '<div class="wave-row">';
+
+          if (c.pWave > 0 && !isNaN(eqTs)) {
+            var pId = 'pwave-' + i;
+            var pArrival = eqTs + c.pWave * 1000;
+            timerTargets.push({ id: pId, arrival: pArrival, done: false });
+            html += '<div class="wave-item">';
+            html += '<span class="icon">📡</span><span class="wave-label">P波</span>';
+            html += '<span id="' + pId + '"><span class="cd-num">' + Math.round(c.pWave) + '</span>秒后到达</span>';
+            html += '</div>';
+          }
+
+          if (c.sWave > 0 && !isNaN(eqTs)) {
+            var sId = 'swave-' + i;
+            var sArrival = eqTs + c.sWave * 1000;
+            timerTargets.push({ id: sId, arrival: sArrival, done: false });
+            html += '<div class="wave-item">';
+            html += '<span class="icon">⚠️</span><span class="wave-label">S波</span>';
+            html += '<span id="' + sId + '"><span class="cd-num">' + Math.round(c.sWave) + '</span>秒后到达</span>';
+            html += '</div>';
+          }
+
+          html += '</div>';
+        }
+
+        html += '</div>';
+        html += '<div class="city-level" style="color:' +
+          (c.level >= 4 ? '#ff3b30' : c.level >= 3 ? '#ff9500' : c.level >= 2 ? '#cc8800' : '#aaa') +
+          '">' + c.levelDesc + '</div>';
+        html += '</div>';
+      }
+      html += '</div>';
+    }
+
+    // === 建议 ===
+    if (data.advice) {
+      html += '<div class="advice-card"><span class="advice-icon">💡</span> ' + data.advice + '</div>';
+    }
+
+    // === CENC 链接 ===
+    if (data.cencUrl) {
+      html += '<a class="link-btn" href="' + data.cencUrl + '" target="_blank" rel="noopener">📋 查看中国地震台网速报</a>';
+    }
+
+    document.getElementById('app').innerHTML = html;
+
+    // 启动倒计时定时器（0.5s 刷新）
+    if (timerTargets.length > 0) {
+      updateCountdown();
+      clearInterval(window._cdInterval);
+      window._cdInterval = setInterval(updateCountdown, 500);
+    } else {
+      // 只有无波数据的城市，仅显示已过去时间
+      updateElapsed();
+      clearInterval(window._cdInterval);
+      window._cdInterval = setInterval(updateElapsed, 2000);
+    }
+  }
+
+  // === 解析 URL hash ===
+  var hash = window.location.hash;
+  if (hash && hash.length > 1) {
+    try {
+      var raw = hash.substring(1);
+      var standard = raw.replace(/-/g, '+').replace(/_/g, '/');
+      while (standard.length % 4) standard += '=';
+      var decoded = atob(standard);
+      var bytes = new Uint8Array(decoded.length);
+      for (var i = 0; i < decoded.length; i++) bytes[i] = decoded.charCodeAt(i);
+      var json = new TextDecoder('utf-8').decode(bytes);
+      var data = JSON.parse(json);
+      render(data);
+      startVoiceCountdown();
+    } catch(e) {
+      document.getElementById('app').innerHTML =
+        '<div class="empty">⚠️ 数据解析失败<br><small style="color:#aaa">请通过地震预警通知打开</small></div>';
+    }
+  }
+})();
+</script>
+</body>
+</html>

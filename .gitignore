@@ -1,0 +1,32 @@
+# ====== Maven ======
+target/
+!.mvn/wrapper/maven-wrapper.jar
+
+# ====== IDE ======
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+
+# ====== 运行时配置（含敏感信息）======
+config/
+
+# ====== 日志 ======
+*.log
+nohup.out
+
+# ====== OS ======
+.DS_Store
+Thumbs.db
+
+# ====== 临时文件 ======
+*.tmp
+*.bak
+*.swp
+*~
+
+# ====== 部署脚本（含敏感信息）======
+deploy.py
+deploy.sh

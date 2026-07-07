@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>地震预警控制台 v5.6</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#f0f2f5;--card:#fff;--text:#1a1a2e;--sub:#888;--border:#e5e7eb;--blue:#0f3460;--green:#10b981;--red:#ef4444;--amber:#f59e0b;--radius:10px}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.5}
+.header{background:linear-gradient(135deg,#1a1a2e,#16213e,#0f3460);color:#fff;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 12px rgba(0,0,0,.12);position:sticky;top:0;z-index:100}
+.header h1{font-size:20px;font-weight:600;display:flex;align-items:center;gap:8px}
+.header .v{font-size:12px;color:#94a3b8;font-weight:400}
+.header .right{display:flex;align-items:center;gap:16px;font-size:13px}
+.header .status-dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:5px}
+.header .status-dot.on{background:#4ade80;box-shadow:0 0 6px #4ade80}
+.header .status-dot.off{background:#f87171;box-shadow:0 0 6px #f87171}
+.header .status-dot.warn{background:#fbbf24;box-shadow:0 0 6px #fbbf24}
+
+.main{padding:20px 24px;max-width:1400px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:16px;grid-auto-rows:auto}
+
+/* Card */
+.card{background:var(--card);border-radius:var(--radius);box-shadow:0 1px 4px rgba(0,0,0,.04);overflow:hidden;border:1px solid var(--border)}
+.card-head{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid #f3f4f6;background:#fafbfc}
+.card-head h2{font-size:14px;font-weight:600;display:flex;align-items:center;gap:6px}
+.card-head .tag{font-size:11px;color:var(--sub);font-weight:400}
+.card-body{padding:12px 16px}
+.card-foot{padding:10px 16px;border-top:1px solid #f3f4f6;display:flex;justify-content:flex-end;gap:8px}
+.full{grid-column:1/-1}
+.ws-log{height:300px;overflow-y:auto;font-family:'SF Mono','Fira Code','Cascadia Code',monospace;font-size:11px;background:#1e1e2e;color:#cdd6f4;padding:10px 14px;border-radius:6px;line-height:1.7;white-space:pre-wrap;word-break:break-all}
+.ws-log .line{display:block;margin-bottom:1px}
+.ws-log .time{color:#585b70}
+.ws-log .t-connected,.ws-log .t-data{color:#a6e3a1}
+.ws-log .t-heartbeat,.ws-log .t-pong{color:#89b4fa}
+.ws-log .t-closed,.ws-log .t-error{color:#f38ba8}
+.ws-log .t-unknown,.ws-log .t-text-unknown{color:#f9e2af}
+.ws-log .t-query,.ws-log .t-poll,.ws-log .t-http-query{color:#94e2d5}
+.ws-log .preview{color:#6c7086;font-style:italic;display:block;margin-left:16px}
+
+/* Form */
+.f-row{display:flex;align-items:center;gap:10px;padding:5px 0}
+.f-row+.f-row{border-top:1px solid #f8f8f8}
+.f-row label{width:110px;font-size:12px;color:var(--sub);flex-shrink:0;text-align:right}
+.f-row input,.f-row select{padding:5px 8px;border:1px solid #ddd;border-radius:5px;font-size:12px;font-family:inherit}
+.f-row input:focus,.f-row select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 2px rgba(15,52,96,.06)}
+.f-row .hint{font-size:11px;color:#bbb;margin-left:8px}
+.f-row input[type="checkbox"]{width:16px;height:16px;cursor:pointer}
+.f-row .v-unit{font-size:11px;color:var(--sub);width:40px;text-align:center}
+
+/* Buttons */
+.btn{padding:5px 14px;border-radius:5px;border:none;cursor:pointer;font-size:12px;font-weight:500;transition:.15s;display:inline-flex;align-items:center;gap:4px;font-family:inherit}
+.btn-primary{background:var(--blue);color:#fff}
+.btn-primary:hover{background:#162752}
+.btn-success{background:var(--green);color:#fff}
+.btn-success:hover{background:#059669}
+.btn-danger{background:var(--red);color:#fff}
+.btn-danger:hover{background:#dc2626}
+.btn-outline{background:#fff;color:var(--blue);border:1px solid #d1d5db}
+.btn-outline:hover{background:#f9fafb}
+.btn-xs{padding:3px 8px;font-size:11px}
+
+/* List items */
+.list-item{display:flex;align-items:center;padding:10px 0;border-bottom:1px solid #f5f5f5;gap:10px}
+.list-item:last-child{border-bottom:none}
+.list-item .info{flex:1;min-width:0}
+.list-item .name{font-weight:600;font-size:13px}
+.list-item .meta{font-size:11px;color:var(--sub);margin-top:2px;display:flex;gap:10px;flex-wrap:wrap}
+.list-item .actions{display:flex;gap:4px;flex-shrink:0}
+.badge{padding:1px 7px;border-radius:8px;font-size:10px;font-weight:500}
+.badge-on{background:#dcfce7;color:#16a34a}
+.badge-off{background:#f3f4f6;color:#9ca3af}
+.empty{padding:24px;text-align:center;color:#ccc;font-size:13px}
+
+/* Modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.35);display:flex;justify-content:center;align-items:center;z-index:1000;animation:fadeIn .15s}
+.modal{background:#fff;border-radius:12px;padding:22px;width:420px;max-width:92vw;max-height:85vh;overflow-y:auto;box-shadow:0 16px 48px rgba(0,0,0,.15);animation:slideUp .2s}
+.modal h3{font-size:16px;margin-bottom:16px;font-weight:600}
+.modal .form-group{margin-bottom:12px}
+.modal label{display:block;font-size:12px;font-weight:500;color:#555;margin-bottom:3px}
+.modal input,.modal select{width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;font-family:inherit}
+.modal input:focus,.modal select:focus{outline:none;border-color:var(--blue)}
+.modal .form-row{display:flex;gap:8px}
+.modal .form-row>*{flex:1}
+.modal .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+.modal .hint{font-size:10px;color:#aaa;margin-top:3px}
+
+/* Alert */
+.alert-bar{background:#fef3c7;border:1px solid #fcd34d;border-radius:7px;padding:8px 12px;font-size:12px;color:#92400e;margin-bottom:14px;display:none;align-items:center;gap:6px}
+
+/* Toast */
+.toast{position:fixed;top:20px;right:20px;padding:10px 20px;border-radius:8px;color:#fff;font-size:13px;z-index:2000;animation:slideIn .25s;box-shadow:0 4px 16px rgba(0,0,0,.15)}
+.toast-ok{background:#10b981}
+.toast-err{background:#ef4444}
+
+/* WS log styles */
+.ws-log .connected{color:#a6e3a1}
+.ws-log .closed{color:#f38ba8}
+.ws-log .error{color:#fab387}
+.ws-log .data{color:#89b4fa}
+.ws-log .heartbeat{color:#f9e2af}
+.ws-log .poll{color:#94e2d5}
+.ws-log .parse-error{color:#f38ba8}
+.ws-log .time{color:#6c7086}
+
+/* Tabs */
+.tabs{display:flex;gap:0;border-bottom:2px solid #e5e7eb;margin-bottom:12px}
+.tab{padding:8px 16px;font-size:13px;cursor:pointer;border:none;background:none;color:var(--sub);font-weight:500;transition:.15s;border-bottom:2px solid transparent;margin-bottom:-2px;font-family:inherit}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--blue);border-bottom-color:var(--blue)}
+.tab-content{display:none}
+.tab-content.active{display:block}
+
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes slideUp{from{transform:translateY(16px);opacity:0}to{transform:translateY(0);opacity:1}}
+@keyframes slideIn{from{transform:translateX(80px);opacity:0}to{transform:translateX(0);opacity:1}}
+
+@media(max-width:900px){.main{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🌍 地震预警控制台 <span class="v">v5.6</span></h1>
+  <div class="right">
+    <span><span class="status-dot" id="wsDot"></span><span id="wsText">检查中...</span></span>
+    <span style="font-size:12px;color:#94a3b8" id="lastData"></span>
+    <button class="btn btn-xs btn-outline" style="color:#fff;border-color:rgba(255,255,255,.3)" onclick="refreshAll()">🔄 刷新</button>
+  </div>
+</div>
+
+<div style="max-width:1400px;margin:0 auto;padding:0 24px">
+  <div class="alert-bar" id="alertBar"><span id="alertMsg"></span></div>
+</div>
+
+<div class="main">
+
+  <!-- ===== 连接配置 ===== -->
+  <div class="card">
+    <div class="card-head"><h2>🔗 WebSocket 连接配置</h2><button class="btn btn-primary btn-xs" onclick="saveSection('connection')">保存</button></div>
+    <div class="card-body" id="connFields">
+      <div class="f-row"><label>WS 地址</label><input id="cfg_websocketUrl" style="flex:1"><span class="v-unit"></span></div>
+      <div class="f-row"><label>REST API</label><input id="cfg_restApiUrl" style="flex:1"></div>
+      <div class="f-row"><label>轮询间隔</label><input id="cfg_pollingIntervalMs" type="number" style="width:80px"><span class="v-unit">ms</span><span class="hint">断线时 HTTP 轮询频率</span></div>
+      <div class="f-row"><label>重连间隔</label><input id="cfg_reconnectInterval" type="number" style="width:80px"><span class="v-unit">秒</span></div>
+      <div class="f-row"><label>自动连接</label><input id="cfg_autoConnect" type="checkbox"><span class="hint">启动时自动建立 WS 连接</span></div>
+      <div class="f-row"><label>主通道</label>
+        <select id="cfg_primaryChannel">
+          <option value="wss">WebSocket (wss) — 实时推送，断线自动切换 HTTP 轮询</option>
+          <option value="http">HTTP 轮询 — 纯轮询模式，不使用 WebSocket</option>
+        </select>
+      </div>
+      <div style="border-top:1px solid var(--border);margin:8px 0;padding-top:8px;font-size:12px;color:var(--muted)">代理（仅 wolfx.jp 走代理，Bark 直连不受影响）</div>
+      <div class="f-row"><label>启用代理</label><input id="cfg_proxyEnabled" type="checkbox"><span class="hint">勾选后 WSS 和 HTTP 轮询经代理访问 wolfx.jp</span></div>
+      <div class="f-row"><label>代理地址</label><input id="cfg_proxyHost" style="flex:1" placeholder="如 127.0.0.1"></div>
+      <div class="f-row"><label>代理端口</label><input id="cfg_proxyPort" type="number" min="1" max="65535" value="1080" style="width:80px"></div>
+    </div>
+  </div>
+
+  <!-- ===== Bark 全局设置 ===== -->
+  <div class="card">
+    <div class="card-head"><h2>📱 Bark 全局设置</h2><button class="btn btn-primary btn-xs" onclick="saveSection('barkGlobal')">保存</button></div>
+    <div class="card-body" id="barkFields">
+      <div class="f-row"><label>API 地址</label><input id="cfg_barkApiUrl" style="flex:1"></div>
+      <div class="f-row"><label>通知声音</label>
+        <select id="cfg_barkSound">
+          <option value="alarm">alarm - 警报</option><option value="bell">bell - 铃声</option>
+          <option value="minuet">minuet - 小步舞曲</option><option value="newsflash">newsflash - 新闻</option>
+          <option value="paymentsuccess">paymentsuccess - 支付成功</option>
+          <option value="shake">shake - 震动</option><option value="silence">silence - 静音</option>
+        </select>
+      </div>
+      <div class="f-row"><label>通知级别</label>
+        <select id="cfg_barkLevel">
+          <option value="active">active - 普通</option><option value="timeSensitive">timeSensitive - 时效性</option>
+          <option value="passive">passive - 静默</option><option value="critical">critical - 紧急（静音模式也响）</option>
+        </select>
+      </div>
+      <div class="f-row"><label>音量</label><input id="cfg_barkVolume" type="number" min="0" max="10" style="width:60px"><span class="v-unit">0-10</span></div>
+      <div class="f-row"><label>重复响铃</label><input id="cfg_barkCall" type="number" min="0" max="10" style="width:60px"><span class="v-unit">次 (0=不重复)</span></div>
+      <div class="f-row"><label>详情页地址</label><input id="cfg_barkDetailPageBaseUrl" style="flex:1" placeholder="如 http://192.168.1.100:8080"><span class="hint">点击通知跳转（留空=降级CENC速报）</span></div>
+    </div>
+  </div>
+
+  <!-- ===== 预警阈值 + 监测城市 ===== -->
+  <div class="card">
+    <div class="card-head">
+      <h2>📍 监测城市 <span class="tag" id="cityCount">0个</span></h2>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-outline btn-xs" onclick="openCityModal()">+ 添加</button>
+      </div>
+    </div>
+    <div class="card-body" id="cityList"><div class="empty">加载中...</div></div>
+  </div>
+
+  <!-- ===== Bark 设备 + 预警阈值 ===== -->
+  <div class="card">
+    <div class="card-head">
+      <h2>📲 Bark 推送设备 <span class="tag" id="deviceCount">0个</span></h2>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-outline btn-xs" onclick="openDeviceModal()">+ 添加</button>
+        <button class="btn btn-outline btn-xs" onclick="testBark()">🧪 测试推送</button>
+      </div>
+    </div>
+    <div class="card-body" id="deviceList"><div class="empty">加载中...</div></div>
+  </div>
+
+  <!-- ===== 模拟地震测试 ===== -->
+  <div class="card">
+    <div class="card-head"><h2>🧪 模拟地震测试</h2></div>
+    <div class="card-body">
+      <div class="f-row">
+        <label>震级(M)</label><input id="sim_mag" type="number" step="0.1" min="0" max="10" value="6.5" style="width:70px">
+        <label style="width:auto;margin-left:14px">深度(km)</label><input id="sim_depth" type="number" step="1" min="1" max="700" value="15" style="width:70px">
+      </div>
+      <div class="f-row">
+        <label>震中纬度</label><input id="sim_lat" type="number" step="0.0001" min="-90" max="90" value="31.58" style="width:100px">
+        <label style="width:auto;margin-left:14px">经度</label><input id="sim_lon" type="number" step="0.0001" min="-180" max="180" value="104.00" style="width:100px">
+      </div>
+      <div class="f-row">
+        <label>震中位置</label><input id="sim_location" placeholder="如：四川德阳市绵竹市" style="flex:1">
+      </div>
+      <div class="f-row">
+        <label></label>
+        <label><input type="checkbox" id="sim_sendBark" checked> 发送 Bark 推送通知</label>
+        <span class="hint">勾选后将推送到所有已启用的 Bark 设备</span>
+      </div>
+    </div>
+    <div class="card-foot">
+      <span id="simResult" class="hint" style="flex:1"></span>
+      <button class="btn btn-primary btn-xs" onclick="simulateEarthquake()">🚀 执行模拟</button>
+    </div>
+  </div>
+
+  <!-- ===== 预警阈值 + 快速操作 ===== -->
+  <div class="card">
+    <div class="card-head"><h2>⚙️ 预警阈值</h2><button class="btn btn-primary btn-xs" onclick="saveWarning()">保存</button></div>
+    <div class="card-body">
+      <div class="f-row">
+        <label>最低预警震级</label><span class="v-unit">M</span><input id="cfg_minMagnitude" type="number" step="0.1" min="0" max="10" style="width:70px">
+        <span class="hint">低于此震级不触发预警</span>
+      </div>
+      <div class="f-row">
+        <label>最低影响等级</label>
+        <select id="cfg_minImpactLevel" style="width:100px">
+          <option value="0">0 - 无感</option><option value="1">1 - 轻微</option>
+          <option value="2">2 - 明显</option><option value="3">3 - 强烈</option>
+          <option value="4">4 - 破坏性</option><option value="5">5 - 毁灭性</option>
+        </select>
+      </div>
+    </div>
+    <div class="card-foot">
+      <button class="btn btn-outline btn-xs" onclick="wsConnect()" id="btnConnect">连接 WS</button>
+      <button class="btn btn-outline btn-xs" onclick="wsDisconnect()" id="btnDisconnect">断开 WS</button>
+      <button class="btn btn-outline btn-xs" onclick="wsQuery()">手动查询</button>
+    </div>
+  </div>
+
+  <!-- ===== WS 实时消息 ===== -->
+  <div class="card full">
+    <div class="card-head">
+      <h2>WebSocket/HTTP 实时消息获取日志</h2>
+      <div style="display:flex;gap:6px;align-items:center">
+        <span id="rawMsgCount" class="tag">0条</span>
+        <button class="btn btn-outline btn-xs" onclick="loadRawMessages()">刷新</button>
+        <label style="font-size:11px;margin-left:8px"><input type="checkbox" id="autoScroll" checked onchange="toggleAutoScroll()"> 自动滚动</label>
+      </div>
+    </div>
+    <div class="card-body" style="padding:0">
+      <div class="ws-log" id="wsLog">等待数据...</div>
+    </div>
+  </div>
+</div>
+
+<!-- 城市弹窗 -->
+<div class="modal-overlay" id="cityModal" style="display:none">
+<div class="modal">
+  <h3 id="cityModalTitle">添加监测城市</h3>
+  <input type="hidden" id="cityEditId">
+  <div class="form-group"><label>城市名称</label><input type="text" id="cityName" placeholder="如：成都市"></div>
+  <div class="form-row">
+    <div class="form-group"><label>纬度</label><input type="number" id="cityLat" step="0.0001" placeholder="30.5728"></div>
+    <div class="form-group"><label>经度</label><input type="number" id="cityLon" step="0.0001" placeholder="104.0668"></div>
+  </div>
+  <div class="form-row">
+    <div class="form-group"><label>场地类别</label>
+      <select id="citySiteClass">
+        <option value="0">I₀ — 坚硬岩石</option><option value="1">I₁ — 岩石</option>
+        <option value="2">II — 中硬土</option><option value="3" selected>III — 中软土</option>
+        <option value="4">IV — 软弱土</option>
+      </select>
+    </div>
+    <div class="form-group"><label>场地放大系数</label><input type="number" id="cityAmp" step="0.1" placeholder="1.6"><div class="hint">0 = 使用场地类别默认值</div></div>
+  </div>
+  <div class="form-group"><label><input type="checkbox" id="cityEnabled" checked> 启用监测</label></div>
+  <div class="modal-actions">
+    <button class="btn btn-outline" onclick="closeCityModal()">取消</button>
+    <button class="btn btn-primary" onclick="saveCity()">保存</button>
+  </div>
+</div></div>
+
+<!-- 设备弹窗 -->
+<div class="modal-overlay" id="deviceModal" style="display:none">
+<div class="modal">
+  <h3 id="deviceModalTitle">添加 Bark 设备</h3>
+  <input type="hidden" id="deviceEditId">
+  <div class="form-group"><label>设备名称</label><input type="text" id="deviceName" placeholder="如：我的iPhone"></div>
+  <div class="form-group"><label>Bark Device Key</label><input type="text" id="deviceKey" placeholder="从 Bark App 中复制"></div>
+  <div class="form-group"><label><input type="checkbox" id="deviceEnabled" checked> 启用推送</label></div>
+  <div class="modal-actions">
+    <button class="btn btn-outline" onclick="closeDeviceModal()">取消</button>
+    <button class="btn btn-primary" onclick="saveDevice()">保存</button>
+  </div>
+</div></div>
+
+<script>
+const API = '/api/earthquake';
+let autoScroll = true;
+
+// ===== 工具函数 =====
+
+async function api(url, opts={}) {
+  try {
+    const res = await fetch(url, { headers:{'Content-Type':'application/json'}, ...opts });
+    if (!res.ok) throw new Error(res.status + ' ' + res.statusText);
+    return await res.json();
+  } catch(e) {
+    toast(e.message, 'err');
+    return null;
+  }
+}
+
+function toast(msg, type='ok') {
+  const el = document.createElement('div');
+  el.className = 'toast toast-' + type;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 2500);
+}
+
+function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function toggleAutoScroll() { autoScroll = document.getElementById('autoScroll').checked; }
+
+// ===== 状态 =====
+
+async function refreshStatus() {
+  const data = await api(API + '/status');
+  if (!data) return;
+  const dot = document.getElementById('wsDot'), text = document.getElementById('wsText');
+  const ch = data.primaryChannel || 'wss';
+
+  if (ch === 'http') {
+    // HTTP 主通道模式
+    if (data.pollingActive) {
+      dot.className = 'status-dot on';
+      text.textContent = 'HTTP 轮询中';
+    } else {
+      dot.className = 'status-dot warn';
+      text.textContent = 'HTTP 未启动';
+    }
+  } else {
+    // WSS 主通道模式
+    if (data.wsConnected) {
+      dot.className = 'status-dot on';
+      text.textContent = 'WebSocket 已连接';
+    } else if (data.pollingActive) {
+      dot.className = 'status-dot warn';
+      text.textContent = 'WS断开·HTTP兜底';
+    } else {
+      dot.className = 'status-dot off';
+      text.textContent = 'WebSocket 未连接';
+    }
+  }
+
+  document.getElementById('lastData').textContent = '数据: ' + data.lastDataAgeHuman;
+  updateButtonLabels(ch);
+}
+
+// ===== 全量配置加载 =====
+
+async function loadConfig() {
+  const data = await api(API + '/config');
+  if (!data) return;
+
+  // 连接配置
+  if (data.connection) {
+    setVal('cfg_websocketUrl', data.connection.websocketUrl || '');
+    setVal('cfg_restApiUrl', data.connection.restApiUrl || '');
+    setVal('cfg_pollingIntervalMs', data.connection.pollingIntervalMs);
+    setVal('cfg_reconnectInterval', data.connection.reconnectInterval);
+    setCheck('cfg_autoConnect', data.connection.autoConnect);
+    setVal('cfg_primaryChannel', data.connection.primaryChannel || 'wss');
+    setCheck('cfg_proxyEnabled', data.connection.proxyEnabled);
+    setVal('cfg_proxyHost', data.connection.proxyHost || '');
+    setVal('cfg_proxyPort', data.connection.proxyPort);
+  }
+
+  // Bark 全局
+  if (data.barkGlobal) {
+    setVal('cfg_barkApiUrl', data.barkGlobal.apiUrl || '');
+    setVal('cfg_barkSound', data.barkGlobal.sound || 'alarm');
+    setVal('cfg_barkLevel', data.barkGlobal.level || 'critical');
+    setVal('cfg_barkVolume', data.barkGlobal.volume);
+    setVal('cfg_barkCall', data.barkGlobal.call);
+    setVal('cfg_barkDetailPageBaseUrl', data.barkGlobal.detailPageBaseUrl || '');
+  }
+
+  // 预警阈值
+  if (data.warning) {
+    setVal('cfg_minMagnitude', data.warning.minMagnitude);
+    setVal('cfg_minImpactLevel', data.warning.minImpactLevel);
+  }
+}
+
+function setVal(id, val) { const el = document.getElementById(id); if (el) el.value = val; }
+function setCheck(id, val) { const el = document.getElementById(id); if (el) el.checked = val === true || val === 'true'; }
+function getVal(id) { const el = document.getElementById(id); return el ? el.value : ''; }
+function getCheck(id) { const el = document.getElementById(id); return el ? el.checked : false; }
+
+// ===== 分块保存 =====
+
+async function saveSection(section) {
+  const body = {};
+  if (section === 'connection') {
+    body.websocketUrl = getVal('cfg_websocketUrl');
+    body.restApiUrl = getVal('cfg_restApiUrl');
+    body.pollingIntervalMs = getVal('cfg_pollingIntervalMs');
+    body.reconnectInterval = getVal('cfg_reconnectInterval');
+    body.autoConnect = getCheck('cfg_autoConnect');
+    body.primaryChannel = getVal('cfg_primaryChannel');
+    body.proxyEnabled = getCheck('cfg_proxyEnabled');
+    body.proxyHost = getVal('cfg_proxyHost');
+    body.proxyPort = getVal('cfg_proxyPort');
+  } else if (section === 'barkGlobal') {
+    body.barkApiUrl = getVal('cfg_barkApiUrl');
+    body.barkSound = getVal('cfg_barkSound');
+    body.barkLevel = getVal('cfg_barkLevel');
+    body.barkVolume = getVal('cfg_barkVolume');
+    body.barkCall = getVal('cfg_barkCall');
+    body.detailPageBaseUrl = getVal('cfg_barkDetailPageBaseUrl');
+  }
+  const data = await api(API + '/config', { method:'PUT', body:JSON.stringify(body) });
+  if (data) toast('配置已保存 ✓');
+}
+
+async function saveWarning() {
+  const body = {
+    minMagnitude: getVal('cfg_minMagnitude'),
+    minImpactLevel: getVal('cfg_minImpactLevel')
+  };
+  const data = await api(API + '/config', { method:'PUT', body:JSON.stringify(body) });
+  if (data) toast('预警阈值已保存 ✓');
+}
+
+// ===== WS 操作 =====
+
+async function wsConnect() { await api(API + '/connect', {method:'POST'}); toast('正在连接...'); setTimeout(refreshStatus, 1000); }
+async function wsDisconnect() { await api(API + '/disconnect', {method:'POST'}); toast('已断开'); refreshStatus(); }
+async function wsQuery() { await api(API + '/query', {method:'POST'}); toast('查询已发送'); }
+
+function updateButtonLabels(channel) {
+  document.getElementById('btnConnect').textContent = channel === 'http' ? '启动 HTTP 轮询' : '连接 WSS';
+  document.getElementById('btnDisconnect').textContent = channel === 'http' ? '停止 HTTP 轮询' : '断开 WSS';
+}
+
+async function testBark() {
+  const data = await api(API + '/bark/test?message=地震预警控制台 v5.6 测试推送', {method:'POST'});
+  if (data && data.success) toast('已推送到 ' + data.deviceCount + ' 个设备 ✓');
+  else toast('推送失败', 'err');
+}
+
+async function simulateEarthquake() {
+  const mag = getVal('sim_mag');
+  const depth = getVal('sim_depth');
+  const lat = parseFloat(getVal('sim_lat'));
+  const lon = parseFloat(getVal('sim_lon'));
+  const loc = getVal('sim_location');
+  const sendBark = getCheck('sim_sendBark');
+
+  if (!mag || !depth || isNaN(lat) || isNaN(lon)) {
+    toast('请填写震级、深度和震中坐标', 'err'); return;
+  }
+
+  document.getElementById('simResult').textContent = '计算中...';
+  const body = { magnitude: mag, depth: depth, latitude: lat, longitude: lon, location: loc || undefined, sendBark: sendBark };
+  const data = await api(API + '/simulate', { method:'POST', body:JSON.stringify(body) });
+  if (!data) { document.getElementById('simResult').textContent = '请求失败'; return; }
+
+  const r = document.getElementById('simResult');
+  if (data.warningCount > 0) {
+    const cities = (data.warnings || []).map(w => w.cityName + ' ' + w.impactLevelDesc).join('、');
+    r.textContent = '触发 ' + data.warningCount + ' 城预警：' + cities + (sendBark ? ' · 已推送' : '');
+    r.style.color = '#ef4444';
+  } else {
+    r.textContent = '模拟完成，' + data.processedCount + ' 城均未触发预警阈值' + (sendBark ? '（未推送）' : '');
+    r.style.color = '#888';
+  }
+  toast('模拟完成 ✓');
+}
+
+// ===== 城市 =====
+
+async function loadCities() {
+  const data = await api(API + '/cities');
+  const el = document.getElementById('cityList');
+  document.getElementById('cityCount').textContent = (data||[]).length + '个';
+  if (!data || data.length === 0) { el.innerHTML = '<div class="empty">暂无监测城市，点击右上角添加</div>'; return; }
+  el.innerHTML = data.map(c => `
+    <div class="list-item">
+      <div class="info">
+        <div class="name">${esc(c.name)}
+          <span class="badge ${c.enabled?'badge-on':'badge-off'}">${c.enabled?'监测中':'已停用'}</span>
+        </div>
+        <div class="meta">
+          <span>📍 (${c.latitude}, ${c.longitude})</span>
+          <span>🏗 ${['I₀坚硬岩石','I₁岩石','II中硬土','III中软土','IV软弱土'][c.siteClass]||'未知'}</span>
+          ${c.customAmplification > 0 ? `<span>📈 ×${c.customAmplification}</span>` : ''}
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-outline btn-xs" onclick="openCityModal('${c.id}')">编辑</button>
+        <button class="btn btn-danger btn-xs" onclick="deleteCity('${c.id}','${esc(c.name)}')">删除</button>
+      </div>
+    </div>`).join('');
+}
+
+async function deleteCity(id, name) {
+  if (!confirm(`确定删除"${name}"？`)) return;
+  await api(API + '/cities/' + id, {method:'DELETE'});
+  loadCities();
+}
+
+function openCityModal(id) {
+  document.getElementById('cityEditId').value = id || '';
+  document.getElementById('cityModalTitle').textContent = id ? '编辑监测城市' : '添加监测城市';
+  if (id) {
+    api(API + '/cities').then(data => {
+      const c = (data||[]).find(x => x.id === id);
+      if (c) {
+        setVal('cityName', c.name); setVal('cityLat', c.latitude); setVal('cityLon', c.longitude);
+        setVal('citySiteClass', c.siteClass); setVal('cityAmp', c.customAmplification);
+        setCheck('cityEnabled', c.enabled);
+      }
+    });
+  } else {
+    ['cityName','cityLat','cityLon'].forEach(k => setVal(k, ''));
+    setVal('citySiteClass', '3'); setVal('cityAmp', '1.6'); setCheck('cityEnabled', true);
+  }
+  document.getElementById('cityModal').style.display = 'flex';
+}
+function closeCityModal() { document.getElementById('cityModal').style.display = 'none'; }
+
+async function saveCity() {
+  const id = document.getElementById('cityEditId').value;
+  const body = {
+    id: id || null, name: getVal('cityName'),
+    latitude: parseFloat(getVal('cityLat')), longitude: parseFloat(getVal('cityLon')),
+    siteClass: parseInt(getVal('citySiteClass')),
+    customAmplification: parseFloat(getVal('cityAmp'))||0,
+    enabled: getCheck('cityEnabled')
+  };
+  if (!body.name || isNaN(body.latitude) || isNaN(body.longitude)) { toast('请填写完整信息', 'err'); return; }
+  const url = id ? API + '/cities/' + id : API + '/cities';
+  await api(url, { method: id ? 'PUT' : 'POST', body: JSON.stringify(body) });
+  closeCityModal(); loadCities(); toast('城市已保存 ✓');
+}
+
+// ===== Bark 设备 =====
+
+async function loadDevices() {
+  const data = await api(API + '/bark-devices');
+  const el = document.getElementById('deviceList');
+  document.getElementById('deviceCount').textContent = (data||[]).length + '个';
+  if (!data || data.length === 0) { el.innerHTML = '<div class="empty">暂无 Bark 设备</div>'; return; }
+  el.innerHTML = data.map(d => `
+    <div class="list-item">
+      <div class="info">
+        <div class="name">${esc(d.name)}
+          <span class="badge ${d.enabled?'badge-on':'badge-off'}">${d.enabled?'推送中':'已停用'}</span>
+        </div>
+        <div class="meta"><span>🔑 ${d.deviceKey}</span></div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-outline btn-xs" onclick="openDeviceModal('${d.id}')">编辑</button>
+        <button class="btn btn-danger btn-xs" onclick="deleteDevice('${d.id}','${esc(d.name)}')">删除</button>
+      </div>
+    </div>`).join('');
+}
+
+async function deleteDevice(id, name) {
+  if (!confirm(`确定删除"${name}"？`)) return;
+  await api(API + '/bark-devices/' + id, {method:'DELETE'});
+  loadDevices();
+}
+
+function openDeviceModal(id) {
+  document.getElementById('deviceEditId').value = id || '';
+  document.getElementById('deviceModalTitle').textContent = id ? '编辑 Bark 设备' : '添加 Bark 设备';
+  if (id) {
+    api(API + '/bark-devices').then(data => {
+      const d = (data||[]).find(x => x.id === id);
+      if (d) {
+        setVal('deviceName', d.name); setVal('deviceKey', '');
+        setCheck('deviceEnabled', d.enabled);
+      }
+    });
+  } else {
+    setVal('deviceName', ''); setVal('deviceKey', '');
+    setCheck('deviceEnabled', true);
+  }
+  document.getElementById('deviceModal').style.display = 'flex';
+}
+function closeDeviceModal() { document.getElementById('deviceModal').style.display = 'none'; }
+
+async function saveDevice() {
+  const id = document.getElementById('deviceEditId').value;
+  const deviceKey = getVal('deviceKey');
+  if (!deviceKey && !id) { toast('请输入 Device Key', 'err'); return; }
+  const body = {
+    id: id || null,
+    name: getVal('deviceName') || '未命名设备',
+    deviceKey: deviceKey || '',
+    enabled: getCheck('deviceEnabled')
+  };
+  const url = id ? API + '/bark-devices/' + id : API + '/bark-devices';
+  await api(url, { method: id ? 'PUT' : 'POST', body: JSON.stringify(body) });
+  closeDeviceModal(); loadDevices(); toast('Bark 设备已保存 ✓');
+}
+
+// ===== WS 实时消息 =====
+
+async function loadRawMessages() {
+  const data = await api(API + '/raw-messages?limit=100');
+  if (!data) return;
+
+  document.getElementById('rawMsgCount').textContent =
+    data.count + '条 | 记录:' + (data.recordCount||0) + ' | ' + (data.initialDataReceived ? '已收初始数据' : '等待数据...');
+
+  const logEl = document.getElementById('wsLog');
+
+  if (data.messages && data.messages.length > 0) {
+    logEl.innerHTML = data.messages.map(m => {
+      let html = '<span class="line">';
+      html += '<span class="time">' + esc(m.time) + '</span> ';
+      html += '<span class="t-' + esc(m.type) + '">[' + esc(m.type) + ']</span> ';
+      html += esc(m.summary);
+      if (m.preview) {
+        html += '\n<span class="preview">  └ ' + esc(m.preview) + '</span>';
+      }
+      html += '</span>';
+      return html;
+    }).join('\n');
+  } else {
+    logEl.innerHTML = '<span class="line"><span class="time">等待 WebSocket 数据...</span></span>';
+  }
+
+  if (autoScroll) logEl.scrollTop = logEl.scrollHeight;
+}
+
+// ===== 弹窗背景点击关闭 =====
+document.getElementById('cityModal').addEventListener('click', function(e){ if(e.target===this) closeCityModal(); });
+document.getElementById('deviceModal').addEventListener('click', function(e){ if(e.target===this) closeDeviceModal(); });
+
+// ===== 初始化 =====
+async function refreshAll() {
+  await Promise.all([refreshStatus(), loadConfig(), loadCities(), loadDevices(), loadRawMessages()]);
+}
+
+refreshAll();
+setInterval(refreshStatus, 5000);
+setInterval(loadRawMessages, 3000);
+</script>
+</body>
+</html>

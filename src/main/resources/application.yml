@@ -1,0 +1,80 @@
+server:
+  port: 5050
+
+spring:
+  application:
+    name: earthquake-warning
+
+# ========== 地震预警配置 ==========
+earthquake:
+  # Wolfx CENC 地震信息 WebSocket 地址
+  websocket-url: wss://ws-api.wolfx.jp/cenc_eqlist
+  # Wolfx CENC REST API 地址（HTTP 轮询兜底用）
+  rest-api-url: https://api.wolfx.jp/cenc_eqlist.json
+  # HTTP 轮询间隔（毫秒），断线时兜底，保证 1s 延迟
+  polling-interval-ms: 1000
+  # 重连间隔（秒），断开后快速重试
+  reconnect-interval: 3
+  # 是否启动时自动连接 WebSocket
+  auto-connect: true
+
+  # 主通道选择：wss = WebSocket（默认，断线自动切换 HTTP 轮询），http = 纯 HTTP 轮询
+  primary-channel: wss
+
+  # ========== 监测城市和 Bark 设备 ==========
+  # 运行时通过 Web 页面或 API 管理，启动时自动加载 config/runtime-config.json
+  # 以下配置仅作为首次启动的默认值
+
+  # ========== Bark 推送全局配置 ==========
+  bark:
+    api-url: https://api.day.app
+    sound: alarm
+    level: critical
+    volume: 10
+    call: 1
+
+  # ========== 预警阈值 ==========
+  warning:
+    # 最低预警震级（低于此震级不推送）
+    min-magnitude: 3.0
+    # 最低预警影响等级（低于此等级不推送，0-5）
+    min-impact-level: 1
+
+  # ========== 地震详情页（点击通知跳转）==========
+  # ⚠️ 手机收到的 Bark 通知点击后跳转到此地址，必须填手机能访问的地址！
+  #    内网测试填电脑局域网 IP（如 http://192.168.1.100:5050），不要用 localhost
+  # 配置后 Bark 通知点击跳转至此页面，展示完整地震信息
+  # 未配置时自动降级为 CENC 中国地震台网速报链接
+  detail-page-base-url:
+
+  # ========== 代理配置（可选）==========
+  # 部分云厂商（如阿里云）IP 段访问 wolfx.jp 可能被阻断。
+  # 启用代理后仅对 wolfx.jp 的 WSS 和 HTTP 请求走代理，Bark 推送不受影响。
+  proxy:
+    enabled: false        # 改为 true 启用 SOCKS5 代理
+    host: 127.0.0.1       # SOCKS5 代理地址（如 mihomo / Clash）
+    port: 1080            # 代理端口
+
+# ========== Swagger UI 配置 ==========
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+  api-docs:
+    path: /v3/api-docs
+    enabled: true
+  info:
+    title: 地震预警系统 API
+    version: 5.6.0
+    description: >
+      对接 Wolfx CENC 地震数据 WebSocket，
+      实时获取全球地震信息，
+      基于 IASPEI-91 模型计算 P/S 波走时、GB 18306-2015 烈度衰减模型，
+      支持多城市监测、多 Bark 设备异步推送，
+      并通过 Web 页面管理全部配置。
+
+# ========== 日志配置 ==========
+logging:
+  level:
+    com.earthquake.warning: DEBUG
+    org.springframework.web.socket: INFO
