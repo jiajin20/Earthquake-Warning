@@ -20,6 +20,7 @@ import org.springframework.web.client.RestTemplate;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.net.URI;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -557,6 +558,15 @@ public class WebSocketClientService {
                 continue;
             }
 
+            // 时效性检查：超过预警窗口的地震不再推送（S 波早已到达所有人）
+            long ageMinutes = java.time.Duration.between(baseRecord.getTimeAsDateTime(), LocalDateTime.now()).toMinutes();
+            if (ageMinutes > configService.getMaxWarningAgeMinutes()) {
+                log.debug("⏰ 跳过过期地震 [{} {} M{}] — 已发生 {} 分钟 > {} 分钟预警窗口",
+                        baseRecord.getTime(), baseRecord.getLocation(), baseRecord.getMagnitude(),
+                        ageMinutes, configService.getMaxWarningAgeMinutes());
+                continue;
+            }
+
             // 对每个启用城市计算
             boolean anyCalculated = false;
             for (MonitoredCity city : enabledCities) {
@@ -596,8 +606,8 @@ public class WebSocketClientService {
             }
         }
 
-        // 清理 processedEvents（1 小时前）和 latestRecords（RECORD_TTL_HOURS 前）
-        long eventCutoff = System.currentTimeMillis() - 3600_000;
+        // 清理 processedEvents（48 小时前，与 RECORD_TTL_HOURS 一致，防止历史地震被"遗忘"后重新推送）
+        long eventCutoff = System.currentTimeMillis() - RECORD_TTL_HOURS * 3600_000;
         processedEvents.entrySet().removeIf(e -> e.getValue() < eventCutoff);
 
         LocalDateTime recordCutoff = LocalDateTime.now().minusHours(RECORD_TTL_HOURS);

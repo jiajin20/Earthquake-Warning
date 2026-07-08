@@ -374,7 +374,7 @@ public class EarthquakeController {
     public ResponseEntity<Map<String, Object>> getConfig() {
         Map<String, Object> config = configService.getAllConfig();
         config.put("model", Map.of(
-                "version", "5.6.0",
+                "version", "5.6.1",
                 "attenuation", "GB 18306-2015 中国东部衰减模型",
                 "travelTime", "IASPEI-91 一维地球速度模型",
                 "distance", "Haversine 大圆公式",

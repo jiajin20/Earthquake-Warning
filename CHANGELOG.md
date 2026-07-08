@@ -4,6 +4,20 @@
 
 ---
 
+## v5.6.1 (2026-07-08)
+
+### 🐛 Bug 修复
+
+- **推送通知无法进入详情页**：修复 `earthquake-detail.html` 中 `getDotClass` 函数声明意外缺失，导致 `'use strict'` 下 SyntaxError，整段 JS 解析失败，详情页始终显示静态"请从地震预警通知中点击查看详情"
+- **历史地震重复推送**：修复 `processedEvents` 去重 Map TTL 仅 1 小时，Wolfx API 持续返回旧数据导致 1 小时后旧事件被重新推送。新增 `maxWarningAgeMinutes` 时效性检查（默认 10 分钟），超时地震直接跳过推送；`processedEvents` TTL 扩展至 48 小时
+
+### 🔧 优化改进
+
+- `RuntimeConfigService` 新增 `maxWarningAgeMinutes` 配置项，支持运行时动态修改
+- 推送逻辑审查确认：WSS/HTTP 实时延迟 < 1s，Swagger 测试接口仅推送最新一条且完全隔离
+
+---
+
 ## v5.6.0 (2026-07-07)
 
 ### 🐛 Bug 修复

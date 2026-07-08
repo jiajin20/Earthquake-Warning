@@ -1,7 +1,6 @@
 # 地震预警项目 - 开发与部署踩坑记录
 
 > 本文档记录了从项目开发到服务器部署过程中遇到的所有问题及其解决方案，供后续参考。
-> ⚠️ 本文档中的 IP 地址、密码、密钥等已替换为占位符。
 
 ---
 
@@ -49,7 +48,7 @@ java -Dmaven.multiModuleProjectDirectory=. -cp .mvn/wrapper/maven-wrapper.jar or
    ```
 2. 部署后验证关键代码是否在服务器上生效：
    ```bash
-   curl -s http://localhost:PORT/page.html | grep -c "关键词"
+   curl -s http://localhost:5500/earthquake-detail.html | grep -c "关键词"
    ```
 3. 确认 JAR 文件大小合理（不应与旧版本完全相同）
 
@@ -59,7 +58,7 @@ java -Dmaven.multiModuleProjectDirectory=. -cp .mvn/wrapper/maven-wrapper.jar or
 
 ### 2.1 Paramiko SFTP 传输
 
-**现象**：需要通过 SSH 远程部署 JAR 到服务器。
+**现象**：需要通过 SSH 远程部署 JAR 到阿里云服务器。
 
 **解决方案**：使用 Python paramiko 库，通过 `Transport` + `SFTPClient` 进行文件传输：
 
@@ -67,7 +66,7 @@ java -Dmaven.multiModuleProjectDirectory=. -cp .mvn/wrapper/maven-wrapper.jar or
 import paramiko
 
 transport = paramiko.Transport(('YOUR_SERVER_IP', 22))
-transport.connect(username='root', password='YOUR_PASSWORD')
+transport.connect(username='root', password='password')
 
 sftp = paramiko.SFTPClient.from_transport(transport)
 sftp.put(local_jar_path, remote_jar_path)
@@ -329,15 +328,14 @@ if (playBtn && !playBtn._bound) {
 
 **现象**：`pom.xml` 显示 1.0.0，Swagger 配置显示 1.0.0，前端显示 v5.0，API 返回 5.0.0。
 
-**修复**：统一为 5.6.0。
+**修复**：统一为 5.6.1。
 
 | 位置 | 旧值 | 新值 |
 |------|------|------|
-| pom.xml | 1.0.0 | 5.6.0 |
-| application.yml (springdoc) | 1.0.0 | 5.6.0 |
+| pom.xml | 1.0.0 | 5.6.1 |
+| application.yml (springdoc) | 1.0.0 | 5.6.1 |
 | index.html | v5.0 | v5.6 |
-| Controller API | 5.0.0 | 5.6.0 |
-| OpenApiConfig.java | 1.0.0 | 5.6.0 |
+| Controller API | 5.0.0 | 5.6.1 |
 
 ---
 
@@ -363,8 +361,8 @@ result = subprocess.run(
 每次部署后必须验证：
 
 - [ ] JAR 文件 MD5 与本地不同
-- [ ] HTTP 200: `curl http://localhost:PORT/index.html`
-- [ ] API 正常: `curl http://localhost:PORT/api/status`
+- [ ] HTTP 200: `curl http://localhost:5500/index.html`
+- [ ] API 正常: `curl http://localhost:5500/api/status`
 - [ ] 关键代码已更新: `grep` 检查新代码特征
 
 ### 8.3 前端开发注意事项

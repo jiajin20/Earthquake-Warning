@@ -21,7 +21,7 @@ earthquake:
   # 主通道选择：wss = WebSocket（默认，断线自动切换 HTTP 轮询），http = 纯 HTTP 轮询
   primary-channel: wss
 
-  # ========== 监测城市和 Bark 设备 ==========
+  # ========== 监测城市和 Bark 设备（v4.0） ==========
   # 运行时通过 Web 页面或 API 管理，启动时自动加载 config/runtime-config.json
   # 以下配置仅作为首次启动的默认值
 
@@ -39,6 +39,8 @@ earthquake:
     min-magnitude: 3.0
     # 最低预警影响等级（低于此等级不推送，0-5）
     min-impact-level: 1
+    # 预警时效窗口（分钟）：超过此时间的地震不再推送预警（S波早已到达）
+    max-warning-age-minutes: 10
 
   # ========== 地震详情页（点击通知跳转）==========
   # ⚠️ 手机收到的 Bark 通知点击后跳转到此地址，必须填手机能访问的地址！
@@ -47,13 +49,13 @@ earthquake:
   # 未配置时自动降级为 CENC 中国地震台网速报链接
   detail-page-base-url:
 
-  # ========== 代理配置（可选）==========
+  # ========== 代理配置 ==========
   # 部分云厂商（如阿里云）IP 段访问 wolfx.jp 可能被阻断。
   # 启用代理后仅对 wolfx.jp 的 WSS 和 HTTP 请求走代理，Bark 推送不受影响。
   proxy:
-    enabled: false        # 改为 true 启用 SOCKS5 代理
-    host: 127.0.0.1       # SOCKS5 代理地址（如 mihomo / Clash）
-    port: 1080            # 代理端口
+    enabled: true
+    host: 127.0.0.1     # mihomo SOCKS5 代理地址
+    port: 1080          # 代理端口
 
 # ========== Swagger UI 配置 ==========
 springdoc:
@@ -65,7 +67,7 @@ springdoc:
     enabled: true
   info:
     title: 地震预警系统 API
-    version: 5.6.0
+    version: 5.6.1
     description: >
       对接 Wolfx CENC 地震数据 WebSocket，
       实时获取全球地震信息，

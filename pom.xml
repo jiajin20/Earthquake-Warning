@@ -13,7 +13,7 @@
 
     <groupId>com.earthquake</groupId>
     <artifactId>earthquake-warning</artifactId>
-    <version>5.6.0</version>
+    <version>5.6.1</version>
     <name>earthquake-warning</name>
     <description>地震预警系统 - 对接 Wolfx CENC 地震数据，计算影响等级并推送 Bark 通知</description>
 

@@ -17,7 +17,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
 /**
- * 运行时可变配置服务（v5.6 — 全量 yml 配置运行时可改）
+ * 运行时可变配置服务（v5.0 — 全量 yml 配置运行时可改）
  */
 @Slf4j
 @Service
@@ -66,6 +66,7 @@ public class RuntimeConfigService {
     // ====== 预警阈值 ======
     private volatile double minMagnitude;
     private volatile int minImpactLevel;
+    private volatile int maxWarningAgeMinutes;
 
     // ---- yml 默认值（由 @Value 注入） ----
     @Value("${earthquake.websocket-url:wss://ws-api.wolfx.jp/cenc_eqlist}")
@@ -104,6 +105,9 @@ public class RuntimeConfigService {
     @Value("${earthquake.warning.min-impact-level:1}")
     private int defaultMinImpactLevel;
 
+    @Value("${earthquake.warning.max-warning-age-minutes:10}")
+    private int defaultMaxWarningAgeMinutes;
+
     @Value("${earthquake.detail-page-base-url:}")
     private String defaultDetailPageBaseUrl;
 
@@ -138,6 +142,7 @@ public class RuntimeConfigService {
         barkCall = defaultBarkCall;
         minMagnitude = defaultMinMagnitude;
         minImpactLevel = defaultMinImpactLevel;
+        maxWarningAgeMinutes = defaultMaxWarningAgeMinutes;
         detailPageBaseUrl = defaultDetailPageBaseUrl;
         proxyEnabled = defaultProxyEnabled;
         proxyHost = defaultProxyHost;
@@ -156,11 +161,9 @@ public class RuntimeConfigService {
                     .siteClass(3).customAmplification(1.6).enabled(true).build());
         }
         if (barkDevices.isEmpty()) {
-            // ⚠️ 请替换为你的 Bark Device Key（从 Bark App 获取）
-            // 详见 https://github.com/Finb/Bark
             barkDevices.add(BarkDevice.builder()
                     .id(shortId())
-                    .name("我的iPhone").deviceKey("YOUR_BARK_DEVICE_KEY").enabled(false).build());
+                    .name("我的iPhone").deviceKey("YOUR_BARK_DEVICE_KEY").enabled(true).build());
         }
         saveToDisk();
         log.info("运行时配置加载完成: {}个城市, {}个Bark设备, WS={}", cities.size(), barkDevices.size(), websocketUrl);
@@ -234,6 +237,9 @@ public class RuntimeConfigService {
 
     public int getMinImpactLevel() { return minImpactLevel; }
     public void setMinImpactLevel(int v) { this.minImpactLevel = v; saveToDisk(); }
+
+    public int getMaxWarningAgeMinutes() { return maxWarningAgeMinutes; }
+    public void setMaxWarningAgeMinutes(int v) { this.maxWarningAgeMinutes = Math.max(1, v); saveToDisk(); }
 
     // ==================== 城市管理 ====================
 
@@ -333,7 +339,7 @@ public class RuntimeConfigService {
         ));
 
         // 预警阈值
-        result.put("warning", Map.of("minMagnitude", minMagnitude, "minImpactLevel", minImpactLevel));
+        result.put("warning", Map.of("minMagnitude", minMagnitude, "minImpactLevel", minImpactLevel, "maxWarningAgeMinutes", maxWarningAgeMinutes));
 
         // 城市与设备
         result.put("cities", new ArrayList<>(cities));
@@ -366,6 +372,7 @@ public class RuntimeConfigService {
             data.put("barkCall", String.valueOf(barkCall));
             data.put("minMagnitude", String.valueOf(minMagnitude));
             data.put("minImpactLevel", String.valueOf(minImpactLevel));
+            data.put("maxWarningAgeMinutes", String.valueOf(maxWarningAgeMinutes));
             data.put("detailPageBaseUrl", detailPageBaseUrl);
             data.put("primaryChannel", primaryChannel);
             data.put("proxyEnabled", String.valueOf(proxyEnabled));
@@ -403,6 +410,7 @@ public class RuntimeConfigService {
             primaryChannel = getString(data, "primaryChannel", defaultPrimaryChannel);
             minMagnitude = getDouble(data, "minMagnitude", defaultMinMagnitude);
             minImpactLevel = getInt(data, "minImpactLevel", defaultMinImpactLevel);
+            maxWarningAgeMinutes = getInt(data, "maxWarningAgeMinutes", defaultMaxWarningAgeMinutes);
 
             if (data.containsKey("cities") && data.get("cities") instanceof List) {
                 List<Map<String, Object>> list = (List<Map<String, Object>>) data.get("cities");
