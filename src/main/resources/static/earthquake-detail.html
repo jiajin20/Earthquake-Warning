@@ -219,9 +219,12 @@
 
   // ========== 语音倒计时系统 ==========
   var cdState = {
-    active: false, muted: true, paused: false,
-    currentSec: 0, maxLevel: 0, intervalId: null, audioCtx: null,
-    audioUnlocked: false  // 浏览器音频策略：需要用户手势才能解锁
+    active: false, muted: true,
+    targetArrival: 0,       // S 波到达的绝对时间戳（毫秒），基于 Date.now() 计算
+    lastDisplayedSec: -1,   // 上次显示/渲染的秒数，防止重复渲染
+    lastSpokenSec: -1,      // 上次语音播报的秒数，防止重复播报
+    maxLevel: 0, intervalId: null, audioCtx: null,
+    audioUnlocked: false    // 浏览器音频策略：需要用户手势才能解锁
   };
 
   /** 用户点击后解锁 AudioContext + SpeechSynthesis（必须由用户手势触发） */
@@ -369,25 +372,25 @@
     return '';
   }
 
-  /** 每秒触发一次：更新视觉 + 播放语音/滴声 */
+  /** 每秒触发一次：基于绝对时间戳计算剩余秒数，不受 setInterval 降频影响 */
   function countdownTick() {
-    if (!cdState.active || cdState.paused) return;
+    if (!cdState.active || !cdState.targetArrival) return;
 
-    var sec = cdState.currentSec;
-    var display = document.getElementById('cd-number');
-    var beepRow = document.getElementById('cd-beep-row');
+    // ★ 基于绝对时间戳计算：即使 setInterval 被浏览器降频到 10s 一次，也能正确计算
+    var remaining = Math.ceil((cdState.targetArrival - Date.now()) / 1000);
 
-    if (sec <= 0) {
-      // 倒计时结束
+    // 已到达
+    if (remaining <= 0) {
       stopVoiceCountdown();
-      // 关闭全屏遮罩（无论是否解锁过声音）
       var overlayEnd = document.getElementById('audio-unlock-overlay');
       if (overlayEnd) overlayEnd.classList.remove('show');
+      var display = document.getElementById('cd-number');
       if (display) {
         display.textContent = '已到达!';
         display.className = 'cd-number-display arrived';
       }
-      if (beepRow) beepRow.textContent = '';
+      var beepRow = document.getElementById('cd-beep-row');
+      if (beepRow) { beepRow.textContent = ''; beepRow.className = 'cd-beep-row'; }
       if (!cdState.muted) {
         console.log('[CD] Countdown ended, speaking arrival message...');
         speakCD('地震波已到达，请注意避险');
@@ -395,66 +398,46 @@
       return;
     }
 
-    // 1. 更新视觉显示
-    if (display) {
-      display.textContent = sec;
-      display.className = 'cd-number-display ' + getCdDisplayClass(sec);
-    }
-    // 同步更新遮罩上的倒计时数字
-    var auoCd = document.getElementById('auo-countdown');
-    if (auoCd && auoCd.offsetParent !== null) { auoCd.textContent = sec; }
+    // 防止同秒重复渲染/播报（例如浏览器高频执行或降频后又恢复）
+    if (remaining === cdState.lastDisplayedSec) return;
+    cdState.lastDisplayedSec = remaining;
 
-    // 2. 音频：滴声 + 语音报数
-    if (!cdState.muted) {
+    // 1. 更新视觉显示
+    var display = document.getElementById('cd-number');
+    if (display) {
+      display.textContent = remaining;
+      display.className = 'cd-number-display ' + getCdDisplayClass(remaining);
+    }
+    // 同步更新遮罩上的倒计时
+    var auoCd = document.getElementById('auo-countdown');
+    if (auoCd) { auoCd.textContent = remaining; }
+
+    // 2. 音频：只在首次出现该秒数时播报（防止同秒重复）
+    if (!cdState.muted && remaining !== cdState.lastSpokenSec) {
+      cdState.lastSpokenSec = remaining;
       var level = cdState.maxLevel;
-      console.log('[CD] Tick ' + sec + ', muted=false, level=' + level + ', unlocked=' + cdState.audioUnlocked);
+      console.log('[CD] Tick ' + remaining + ', muted=false, level=' + level);
 
       if (level >= 4) {
-        // 破坏性地震：两声"滴滴"
         playBeep();
         setTimeout(function() { playBeep(); }, 180);
-        setTimeout(function() { speakCD(sec); }, 400);
+        setTimeout(function() { speakCD(remaining); }, 400);
       } else if (level >= 2) {
-        // 有感地震：一声"滴"
         playBeep();
-        setTimeout(function() { speakCD(sec); }, 200);
+        setTimeout(function() { speakCD(remaining); }, 200);
       } else {
-        // 几乎无感：纯数字
-        speakCD(sec);
+        speakCD(remaining);
       }
-    } else {
-      console.log('[CD] Tick ' + sec + ', muted=true — audio skipped');
     }
-
-    cdState.currentSec--;
   }
 
   function stopVoiceCountdown() {
     cdState.active = false;
+    cdState.lastDisplayedSec = -1;
+    cdState.lastSpokenSec = -1;
     if (cdState.intervalId) {
       clearInterval(cdState.intervalId);
       cdState.intervalId = null;
-    }
-    // 重置播放按钮
-    var btn = document.getElementById('cd-btn-play');
-    if (btn) { btn.textContent = '▶️ 播放'; btn.className = 'cd-btn'; }
-  }
-
-  /** 播放 / 暂停切换 */
-  function togglePauseCD() {
-    cdState.paused = !cdState.paused;
-    var btn = document.getElementById('cd-btn-play');
-    if (!btn) return;
-    if (cdState.paused) {
-      btn.textContent = '▶️ 继续';
-      btn.className = 'cd-btn on';
-    } else {
-      btn.textContent = '⏸️ 暂停';
-      btn.className = 'cd-btn';
-      // 如果 AudioContext 被暂停，恢复它
-      if (cdState.audioCtx && cdState.audioCtx.state === 'suspended') {
-        cdState.audioCtx.resume();
-      }
     }
   }
 
@@ -504,6 +487,7 @@
     if (!bestCity) return;
 
     var sArrival = eqTs + bestCity.sWave * 1000;
+    cdState.targetArrival = sArrival;  // 保存绝对到达时间戳
     var remaining = Math.ceil((sArrival - Date.now()) / 1000);
 
     // S 波已到达，不启动倒计时
@@ -517,9 +501,9 @@
       return;
     }
 
-    cdState.currentSec = remaining;
     cdState.active = true;
-    cdState.paused = false;
+    cdState.lastDisplayedSec = -1;
+    cdState.lastSpokenSec = -1;
     cdState.muted = true;        // 浏览器策略：初始必须静音，等待用户手势解锁
     cdState.audioUnlocked = false;
 
@@ -556,19 +540,12 @@
     }
 
     // 按钮状态 — 初始静音，提示用户点击解锁
-    var playBtn = document.getElementById('cd-btn-play');
     var muteBtn = document.getElementById('cd-btn-mute');
-    if (playBtn) { playBtn.textContent = '⏸️ 暂停'; playBtn.className = 'cd-btn'; }
     if (muteBtn) { muteBtn.textContent = '🔊 点击启用声音'; muteBtn.className = 'cd-btn unlock'; }
 
     // 绑定按钮事件 — 使用闭包防止重复绑定
     (function bindButtons() {
-      var playBtn = document.getElementById('cd-btn-play');
       var muteBtn = document.getElementById('cd-btn-mute');
-      if (playBtn && !playBtn._bound) {
-        playBtn._bound = true;
-        playBtn.addEventListener('click', togglePauseCD);
-      }
       if (muteBtn && !muteBtn._bound) {
         muteBtn._bound = true;
         muteBtn.addEventListener('click', function(e) {
@@ -608,6 +585,23 @@
     if (cdState.intervalId) clearInterval(cdState.intervalId);
     countdownTick();
     cdState.intervalId = setInterval(countdownTick, 1000);
+
+    // ★ 监听页面可见性变化：从后台切回前台时强制刷新，避免 Safari 降频导致显示滞后
+    if (!window._visBound) {
+      window._visBound = true;
+      document.addEventListener('visibilitychange', function() {
+        if (!document.hidden && cdState.active) {
+          console.log('[CD] Page visible again, forcing refresh');
+          cdState.lastDisplayedSec = -1;  // 重置，确保 countdownTick 刷新显示
+          cdState.lastSpokenSec = -1;     // 重置，允许回到前台后重新播报当前秒
+          // 如果 AudioContext 被暂停，尝试恢复
+          if (cdState.audioCtx && cdState.audioCtx.state === 'suspended') {
+            cdState.audioCtx.resume();
+          }
+          countdownTick();
+        }
+      });
+    }
   }
 
   function getDotClass(level) {
@@ -723,7 +717,6 @@
     html += '<div class="cd-number-display" id="cd-number">--</div>';
     html += '<div class="cd-beep-row" id="cd-beep-row"></div>';
     html += '<div class="cd-controls">';
-    html += '<button class="cd-btn" id="cd-btn-play">⏸️ 暂停</button>';
     html += '<button class="cd-btn" id="cd-btn-mute">🔊 有声</button>';
     html += '</div>';
     html += '</div>';

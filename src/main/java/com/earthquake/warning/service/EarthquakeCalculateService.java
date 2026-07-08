@@ -13,9 +13,9 @@ import org.springframework.stereotype.Service;
 public class EarthquakeCalculateService {
 
     private static final double EARTH_RADIUS_KM = 6371.0;
-    private static final double ATTEN_A = 4.178;
-    private static final double ATTEN_B = 1.524;
-    private static final double ATTEN_C = 2.386;
+    private static final double ATTEN_A = 2.0;
+    private static final double ATTEN_B = 1.5;
+    private static final double ATTEN_C = 1.3;
     private static final double ATTEN_D = 15.0;
 
     private final TravelTimeService travelTimeService;

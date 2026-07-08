@@ -680,8 +680,18 @@ public class WebSocketClientService {
      * 返回 1 表示成功解析并处理，返回 0 表示不是此格式。
      */
     private int parseSingleEarthquakeRecord(JsonNode root) {
+        // 支持数组格式：遍历每个元素
+        if (root.isArray()) {
+            int count = 0;
+            for (JsonNode node : root) {
+                count += parseSingleEarthquakeRecord(node);
+            }
+            return count;
+        }
+
         // 快速检测：扁平格式没有 No1-No100，但有 OriginTime/HypoCenter/ID 等关键字段
-        boolean hasKeyField = root.has("OriginTime") || root.has("HypoCenter") || root.has("Magnitude");
+        boolean hasKeyField = root.has("OriginTime") || root.has("HypoCenter") || root.has("Magnitude")
+                || root.has("hypocenter") || root.has("originTime") || root.has("magnitude");
         if (!hasKeyField) return 0;
 
         EarthquakeRecord record;
@@ -690,6 +700,51 @@ public class WebSocketClientService {
         } catch (Exception e) {
             log.debug("扁平格式解析失败: {}", e.getMessage());
             return 0;
+        }
+
+        // 手动 fallback：Jackson @JsonAlias 偶尔对大驼峰字段映射失败
+        if (record.getLocation() == null || record.getLocation().isBlank()) {
+            if (root.has("HypoCenter")) record.setLocation(root.get("HypoCenter").asText());
+            else if (root.has("hypocenter")) record.setLocation(root.get("hypocenter").asText());
+            else if (root.has("PlaceName")) record.setLocation(root.get("PlaceName").asText());
+            else if (root.has("placeName")) record.setLocation(root.get("placeName").asText());
+        }
+        if (record.getPlaceName() == null || record.getPlaceName().isBlank()) {
+            if (record.getLocation() != null) record.setPlaceName(record.getLocation());
+            else if (root.has("HypoCenter")) record.setPlaceName(root.get("HypoCenter").asText());
+        }
+        if (record.getTime() == null || record.getTime().isBlank()) {
+            if (root.has("OriginTime")) record.setTime(root.get("OriginTime").asText());
+            else if (root.has("originTime")) record.setTime(root.get("originTime").asText());
+            else if (root.has("Time")) record.setTime(root.get("Time").asText());
+        }
+        if (record.getMagnitude() == null || record.getMagnitude().isBlank()) {
+            if (root.has("Magnitude")) record.setMagnitude(root.get("Magnitude").asText());
+            else if (root.has("magnitude")) record.setMagnitude(root.get("magnitude").asText());
+        }
+        if (record.getEventId() == null || record.getEventId().isBlank()) {
+            if (root.has("ID")) record.setEventId(root.get("ID").asText());
+            else if (root.has("EventID")) record.setEventId(root.get("EventID").asText());
+            else if (root.has("eventId")) record.setEventId(root.get("eventId").asText());
+        }
+        if (record.getDepth() == null || record.getDepth().isBlank()) {
+            if (root.has("Depth")) record.setDepth(root.get("Depth").asText());
+            else if (root.has("depth")) record.setDepth(root.get("depth").asText());
+        }
+        if (record.getLatitude() == null || record.getLatitude().isBlank()) {
+            if (root.has("Latitude")) record.setLatitude(root.get("Latitude").asText());
+            else if (root.has("latitude")) record.setLatitude(root.get("latitude").asText());
+            else if (root.has("Lat")) record.setLatitude(root.get("Lat").asText());
+        }
+        if (record.getLongitude() == null || record.getLongitude().isBlank()) {
+            if (root.has("Longitude")) record.setLongitude(root.get("Longitude").asText());
+            else if (root.has("longitude")) record.setLongitude(root.get("longitude").asText());
+            else if (root.has("Lon")) record.setLongitude(root.get("Lon").asText());
+        }
+        if (record.getIntensity() == null || record.getIntensity().isBlank()) {
+            if (root.has("MaxIntensity")) record.setIntensity(root.get("MaxIntensity").asText());
+            else if (root.has("maxIntensity")) record.setIntensity(root.get("maxIntensity").asText());
+            else if (root.has("Intensity")) record.setIntensity(root.get("Intensity").asText());
         }
 
         // 验证必要字段

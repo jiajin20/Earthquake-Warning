@@ -21,6 +21,12 @@
 - `WebSocketClientService`：新增 `reconnect()` 方法（断开→清空去重表/记录缓存→重连），替代原 `switchPrimaryChannel()` 的局部行为
 - 控制台 UI：连接配置卡片顶部新增数据源选择下拉框，蓝色提示框显示当前数据源名称，切换时自动填充 URL 并保存
 
+### 🐛 Bug 修复
+
+- **震感计算衰减过快**：原衰减系数 C=2.386 导致远场烈度系统性偏低，M6.5 在 150km 外判定为"无感"。修正为 A=2.0/B=1.5/C=1.3，M6.5 在 150km 修正后烈度约 5.8（明显有感），符合实际经验
+- **HTTP 轮询新格式字段映射失败**：`parseSingleEarthquakeRecord` 中 Jackson `@JsonAlias` 对大驼峰字段偶发映射失败 → `location=null` 被丢弃。增加手动 fallback 遍历 JSON 节点提取字段，同时支持数组格式
+- **倒计时暂停按钮设计不当 + Safari 后台降频**：移除暂停按钮（倒计时不应可中断），`countdownTick()` 改为基于 `targetArrival` 绝对时间戳计算剩余秒数，解决 `setInterval` 在 iOS Safari 后台被降频至 ~10s/次导致的计时严重偏慢。新增 `visibilitychange` 监听在页面回到前台时强制刷新
+
 ---
 
 ## v5.6.1 (2026-07-08)
