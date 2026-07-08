@@ -2,7 +2,7 @@
 
 > 实时对接 Wolfx CENC 中国地震台网数据，多城市影响计算与 Bark 推送通知系统
 
-[![Version](https://img.shields.io/badge/version-5.6.1-blue.svg)](https://github.com)
+[![Version](https://img.shields.io/badge/version-5.7.0-blue.svg)](https://github.com)
 [![Java](https://img.shields.io/badge/Java-17-orange.svg)](https://openjdk.org/projects/jdk/17/)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.3.5-brightgreen.svg)](https://spring.io/projects/spring-boot)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
