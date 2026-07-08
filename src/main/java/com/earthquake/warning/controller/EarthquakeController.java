@@ -374,11 +374,11 @@ public class EarthquakeController {
     public ResponseEntity<Map<String, Object>> getConfig() {
         Map<String, Object> config = configService.getAllConfig();
         config.put("model", Map.of(
-                "version", "5.6.1",
+                "version", "5.7.0",
                 "attenuation", "GB 18306-2015 中国东部衰减模型",
                 "travelTime", "IASPEI-91 一维地球速度模型",
                 "distance", "Haversine 大圆公式",
-                "features", "多城市监测 + 多Bark设备 + 全量运行时可配"
+                "features", "多城市监测 + 多Bark设备 + 全量运行时可配 + 双数据源切换"
         ));
         config.put("timestamp", LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
         return ResponseEntity.ok(config);
@@ -391,6 +391,11 @@ public class EarthquakeController {
             try {
                 String v = e.getValue() != null ? e.getValue().toString() : "";
                 switch (e.getKey()) {
+                    case "dataSource" -> {
+                        configService.setDataSource(v);
+                        // 数据源切换后立即重连，用新 URL 获取数据
+                        wsClientService.reconnect();
+                    }
                     case "websocketUrl" -> configService.setWebsocketUrl(v);
                     case "restApiUrl" -> configService.setRestApiUrl(v);
                     case "pollingIntervalMs" -> configService.setPollingIntervalMs(Integer.parseInt(v));
@@ -424,6 +429,7 @@ public class EarthquakeController {
     @Operation(summary = "获取单个配置项")
     public ResponseEntity<Map<String, String>> getConfigValue(@PathVariable String key) {
         String val = switch (key) {
+            case "dataSource" -> configService.getDataSource();
             case "websocketUrl" -> configService.getWebsocketUrl();
             case "restApiUrl" -> configService.getRestApiUrl();
             case "pollingIntervalMs" -> String.valueOf(configService.getPollingIntervalMs());
@@ -452,6 +458,10 @@ public class EarthquakeController {
     public ResponseEntity<Map<String, String>> setConfigValue(@PathVariable String key, @RequestBody String value) {
         try {
             switch (key) {
+                case "dataSource" -> {
+                    configService.setDataSource(value);
+                    wsClientService.reconnect();
+                }
                 case "websocketUrl" -> configService.setWebsocketUrl(value);
                 case "restApiUrl" -> configService.setRestApiUrl(value);
                 case "pollingIntervalMs" -> configService.setPollingIntervalMs(Integer.parseInt(value));

@@ -7,9 +7,13 @@ spring:
 
 # ========== 地震预警配置 ==========
 earthquake:
-  # Wolfx CENC 地震信息 WebSocket 地址
+  # 数据源选择（v5.7）：cenc_eqlist = 中国地震台网发布最新地震信息（No1-No50 格式）
+  #                   cenc_eew = 中国地震台网实时地震预警（扁平单对象格式）
+  data-source: cenc_eqlist
+
+  # Wolfx CENC 地震信息 WebSocket 地址（由 data-source 自动覆盖，无需手动修改）
   websocket-url: wss://ws-api.wolfx.jp/cenc_eqlist
-  # Wolfx CENC REST API 地址（HTTP 轮询兜底用）
+  # Wolfx CENC REST API 地址（由 data-source 自动覆盖，无需手动修改）
   rest-api-url: https://api.wolfx.jp/cenc_eqlist.json
   # HTTP 轮询间隔（毫秒），断线时兜底，保证 1s 延迟
   polling-interval-ms: 1000
@@ -67,7 +71,7 @@ springdoc:
     enabled: true
   info:
     title: 地震预警系统 API
-    version: 5.6.1
+    version: 5.7.0
     description: >
       对接 Wolfx CENC 地震数据 WebSocket，
       实时获取全球地震信息，

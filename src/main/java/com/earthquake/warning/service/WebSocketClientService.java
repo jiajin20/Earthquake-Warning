@@ -279,6 +279,23 @@ public class WebSocketClientService {
         }
     }
 
+    /** 数据源切换后调用：断开旧连接、用新 URL 重连（v5.7） */
+    public synchronized void reconnect() {
+        log.info("数据源切换 — 断开旧连接，准备用新 URL 重连...");
+        disconnect();
+        // 重置去重表，避免新旧数据源的 eventId 格式不同导致冲突
+        processedEvents.clear();
+        // 清空旧记录，新数据源数据完全覆盖
+        latestRecords.clear();
+        // 短暂延迟确保旧连接完全释放
+        try { Thread.sleep(500); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        if (configService.isAutoConnect()) {
+            connect();
+        } else {
+            log.info("autoConnect=false，数据源 URL 已更新，但不自动连接。手动调用 POST /connect 启动。");
+        }
+    }
+
     /** 获取最新地震记录，按发震时间降序排列（最新的在最前） */
     public List<EarthquakeRecord> getLatestRecords() {
         return latestRecords.values().stream()
@@ -461,9 +478,16 @@ public class WebSocketClientService {
                 initialDataReceived = true;
                 appendRawMessage("data", "收到 " + recordCount + " 条地震数据 (No1-No" + recordCount + ")");
             } else {
-                // 0 条记录 — 可能是未知格式，展示预览帮助排查
-                String preview = truncateJson(trimmed);
-                appendRawMessage("unknown", "收到非标准格式消息 (" + trimmed.length() + " bytes) — 预览: " + preview);
+                // 尝试扁平单对象格式（新数据源）：直接反序列化为单条 EarthquakeRecord
+                int flatCount = parseSingleEarthquakeRecord(root);
+                if (flatCount > 0) {
+                    initialDataReceived = true;
+                    appendRawMessage("data", "收到 1 条地震数据 (扁平格式)");
+                } else {
+                    // 0 条记录 — 可能是未知格式，展示预览帮助排查
+                    String preview = truncateJson(trimmed);
+                    appendRawMessage("unknown", "收到非标准格式消息 (" + trimmed.length() + " bytes) — 预览: " + preview);
+                }
             }
 
         } catch (Exception e) {
@@ -642,6 +666,96 @@ public class WebSocketClientService {
             barkService.sendWarningAsync(uniqueWarnings);
             for (EarthquakeListener listener : listeners) {
                 try { listener.onNewEarthquake(uniqueWarnings); } catch (Exception e) {
+                    log.error("监听器回调异常: {}", e.getMessage());
+                }
+            }
+        }
+
+        return count;
+    }
+
+    /**
+     * 解析扁平单对象格式的地震记录（新数据源格式）。
+     * 适用格式：{"ID":"...", "EventID":"...", "OriginTime":"...", "HypoCenter":"...", ...}
+     * 返回 1 表示成功解析并处理，返回 0 表示不是此格式。
+     */
+    private int parseSingleEarthquakeRecord(JsonNode root) {
+        // 快速检测：扁平格式没有 No1-No100，但有 OriginTime/HypoCenter/ID 等关键字段
+        boolean hasKeyField = root.has("OriginTime") || root.has("HypoCenter") || root.has("Magnitude");
+        if (!hasKeyField) return 0;
+
+        EarthquakeRecord record;
+        try {
+            record = objectMapper.treeToValue(root, EarthquakeRecord.class);
+        } catch (Exception e) {
+            log.debug("扁平格式解析失败: {}", e.getMessage());
+            return 0;
+        }
+
+        // 验证必要字段
+        if (record.getTime() == null || record.getLocation() == null || record.getMagnitude() == null) {
+            log.debug("扁平格式记录缺少必要字段 (time={}, location={}, magnitude={})",
+                    record.getTime(), record.getLocation(), record.getMagnitude());
+            return 0;
+        }
+
+        // 去重：使用 eventId
+        String eventId = record.getEventId();
+        if (eventId != null && processedEvents.containsKey(eventId)) {
+            log.debug("扁平格式 — 已处理过的事件 [{}] {} M{}，跳过", eventId, record.getLocation(), record.getMagnitude());
+            return 0;
+        }
+
+        // 时效性检查
+        long ageMinutes = java.time.Duration.between(record.getTimeAsDateTime(), LocalDateTime.now()).toMinutes();
+        if (ageMinutes > configService.getMaxWarningAgeMinutes()) {
+            log.debug("⏰ 扁平格式 — 跳过过期地震 [{} {} M{}] — 已发生 {} 分钟 > {} 分钟预警窗口",
+                    record.getTime(), record.getLocation(), record.getMagnitude(),
+                    ageMinutes, configService.getMaxWarningAgeMinutes());
+            return 0;
+        }
+
+        // 对每个启用城市计算
+        List<MonitoredCity> enabledCities = configService.getEnabledCities();
+        if (enabledCities.isEmpty()) {
+            log.warn("没有启用的监测城市，跳过扁平格式记录");
+            return 0;
+        }
+
+        log.info("📥 扁平格式 — 收到地震: {} M{} {}", record.getTime(), record.getMagnitude(), record.getLocation());
+
+        List<EarthquakeRecord> newWarnings = new ArrayList<>();
+        int count = 0;
+        boolean anyCalculated = false;
+
+        for (MonitoredCity city : enabledCities) {
+            EarthquakeRecord cityRecord = record.copy();
+            calculateService.calculate(cityRecord, city);
+            String uniqueKey = (eventId != null ? eventId : record.getTime()) + ":" + city.getId();
+            latestRecords.put(uniqueKey, cityRecord);
+            anyCalculated = true;
+            count++;
+
+            if (calculateService.shouldWarn(cityRecord)) {
+                newWarnings.add(cityRecord);
+                log.info("⚠ 地震预警 [{}] - 发震:{}, 震中:{}, M{}, 距离:{}km, 影响:{}",
+                        city.getName(), cityRecord.getTime(), cityRecord.getLocation(), cityRecord.getMagnitude(),
+                        cityRecord.getEpicenterDistance() != null ? String.format("%.0f", cityRecord.getEpicenterDistance()) : "?",
+                        cityRecord.getImpactLevelDesc());
+            }
+        }
+
+        if (eventId != null && anyCalculated) {
+            processedEvents.put(eventId, System.currentTimeMillis());
+        }
+
+        // 推送
+        if (!newWarnings.isEmpty()) {
+            log.info("📤 扁平格式 — 推送 {} 条预警 → {} 个城市触发", newWarnings.size(),
+                    newWarnings.stream().map(EarthquakeRecord::getCityName).distinct().count());
+            barkService.sendWarningAsync(newWarnings);
+            for (EarthquakeListener listener : listeners) {
+                try { listener.onNewEarthquake(newWarnings); } catch (Exception e) {
                     log.error("监听器回调异常: {}", e.getMessage());
                 }
             }

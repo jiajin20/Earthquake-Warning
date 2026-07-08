@@ -38,6 +38,23 @@ public class RuntimeConfigService {
     // ====== Bark 设备 ======
     private final CopyOnWriteArrayList<BarkDevice> barkDevices = new CopyOnWriteArrayList<>();
 
+    // ====== 数据源选择（v5.7） ======
+    private volatile String dataSource;
+
+    // 数据源预设：名称 -> {wsUrl, restUrl, displayName}
+    private static final Map<String, Map<String, String>> DATA_SOURCE_PRESETS = Map.of(
+            "cenc_eqlist", Map.of(
+                    "wsUrl", "wss://ws-api.wolfx.jp/cenc_eqlist",
+                    "restUrl", "https://api.wolfx.jp/cenc_eqlist.json",
+                    "displayName", "中国地震台网发布最新地震信息"
+            ),
+            "cenc_eew", Map.of(
+                    "wsUrl", "wss://ws-api.wolfx.jp/cenc_eew",
+                    "restUrl", "https://api.wolfx.jp/cenc_eew.json",
+                    "displayName", "中国地震台网实时地震预警"
+            )
+    );
+
     // ====== WebSocket / 连接配置 ======
     private volatile String websocketUrl;
     private volatile String restApiUrl;
@@ -123,6 +140,9 @@ public class RuntimeConfigService {
     @Value("${earthquake.primary-channel:wss}")
     private String defaultPrimaryChannel;
 
+    @Value("${earthquake.data-source:cenc_eqlist}")
+    private String defaultDataSource;
+
     public RuntimeConfigService(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper.enable(SerializationFeature.INDENT_OUTPUT);
     }
@@ -148,11 +168,17 @@ public class RuntimeConfigService {
         proxyHost = defaultProxyHost;
         proxyPort = defaultProxyPort;
         primaryChannel = defaultPrimaryChannel;
+        dataSource = defaultDataSource;
 
         // 从磁盘加载覆盖
         loadFromDisk();
         // application.yml 中的 primary-channel 在启动时始终生效，覆盖磁盘旧值
         primaryChannel = defaultPrimaryChannel;
+
+        // 如果磁盘没有存储 dataSource 或存储的值无效，重置为 yml 默认值
+        if (!DATA_SOURCE_PRESETS.containsKey(dataSource)) {
+            dataSource = defaultDataSource;
+        }
 
         if (cities.isEmpty()) {
             cities.add(MonitoredCity.builder()
@@ -163,10 +189,47 @@ public class RuntimeConfigService {
         if (barkDevices.isEmpty()) {
             barkDevices.add(BarkDevice.builder()
                     .id(shortId())
-                    .name("我的iPhone").deviceKey("YOUR_BARK_DEVICE_KEY").enabled(true).build());
+                    .name("我的iPhone").deviceKey("DWPHJh4yHuUUrwXC5CNEPR").enabled(true).build());
         }
         saveToDisk();
         log.info("运行时配置加载完成: {}个城市, {}个Bark设备, WS={}", cities.size(), barkDevices.size(), websocketUrl);
+    }
+
+    // ==================== 数据源选择（v5.7） ====================
+
+    /** 获取当前数据源标识 */
+    public String getDataSource() { return dataSource; }
+
+    /** 获取数据源显示名称 */
+    public String getDataSourceDisplayName() {
+        Map<String, String> preset = DATA_SOURCE_PRESETS.get(dataSource);
+        return preset != null ? preset.get("displayName") : dataSource;
+    }
+
+    /** 获取所有可选数据源列表 */
+    public List<Map<String, String>> getAvailableDataSources() {
+        List<Map<String, String>> list = new ArrayList<>();
+        for (Map.Entry<String, Map<String, String>> entry : DATA_SOURCE_PRESETS.entrySet()) {
+            Map<String, String> ds = new LinkedHashMap<>(entry.getValue());
+            ds.put("key", entry.getKey());
+            list.add(ds);
+        }
+        return list;
+    }
+
+    /** 切换数据源：自动更新 WS/REST URL 并持久化 */
+    public void setDataSource(String v) {
+        if (!DATA_SOURCE_PRESETS.containsKey(v)) {
+            log.warn("未知数据源 '{}'，保持当前数据源 '{}'", v, dataSource);
+            return;
+        }
+        this.dataSource = v;
+        Map<String, String> preset = DATA_SOURCE_PRESETS.get(v);
+        this.websocketUrl = preset.get("wsUrl");
+        this.restApiUrl = preset.get("restUrl");
+        log.info("数据源已切换为: {} ({}) — WS={} REST={}",
+                v, preset.get("displayName"), websocketUrl, restApiUrl);
+        saveToDisk();
     }
 
     // ==================== 连接配置 Getters / Setters ====================
@@ -316,17 +379,20 @@ public class RuntimeConfigService {
         Map<String, Object> result = new LinkedHashMap<>();
 
         // 连接配置
-        result.put("connection", Map.of(
-                "websocketUrl", websocketUrl,
-                "restApiUrl", restApiUrl,
-                "pollingIntervalMs", pollingIntervalMs,
-                "reconnectInterval", reconnectInterval,
-                "autoConnect", autoConnect,
-                "primaryChannel", primaryChannel,
-                "proxyEnabled", proxyEnabled,
-                "proxyHost", proxyHost != null ? proxyHost : "",
-                "proxyPort", proxyPort
-        ));
+        Map<String, Object> conn = new LinkedHashMap<>();
+        conn.put("dataSource", dataSource);
+        conn.put("dataSourceDisplayName", getDataSourceDisplayName());
+        conn.put("availableDataSources", getAvailableDataSources());
+        conn.put("websocketUrl", websocketUrl);
+        conn.put("restApiUrl", restApiUrl);
+        conn.put("pollingIntervalMs", pollingIntervalMs);
+        conn.put("reconnectInterval", reconnectInterval);
+        conn.put("autoConnect", autoConnect);
+        conn.put("primaryChannel", primaryChannel);
+        conn.put("proxyEnabled", proxyEnabled);
+        conn.put("proxyHost", proxyHost != null ? proxyHost : "");
+        conn.put("proxyPort", proxyPort);
+        result.put("connection", conn);
 
         // Bark 全局
         result.put("barkGlobal", Map.of(
@@ -360,6 +426,7 @@ public class RuntimeConfigService {
             File file = new File(CONFIG_FILE);
             file.getParentFile().mkdirs();
             Map<String, Object> data = new LinkedHashMap<>();
+            data.put("dataSource", dataSource);
             data.put("websocketUrl", websocketUrl);
             data.put("restApiUrl", restApiUrl);
             data.put("pollingIntervalMs", String.valueOf(pollingIntervalMs));
@@ -395,6 +462,9 @@ public class RuntimeConfigService {
 
             websocketUrl = getString(data, "websocketUrl", defaultWebsocketUrl);
             restApiUrl = getString(data, "restApiUrl", defaultRestApiUrl);
+            // 加载 dataSource，若磁盘存储的无效则使用 yml 默认值
+            String ds = getString(data, "dataSource", defaultDataSource);
+            dataSource = DATA_SOURCE_PRESETS.containsKey(ds) ? ds : defaultDataSource;
             pollingIntervalMs = getInt(data, "pollingIntervalMs", defaultPollingIntervalMs);
             reconnectInterval = getInt(data, "reconnectInterval", defaultReconnectInterval);
             autoConnect = getBool(data, "autoConnect", defaultAutoConnect);

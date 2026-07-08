@@ -4,6 +4,25 @@
 
 ---
 
+## v5.7.0 (2026-07-08)
+
+### ✨ 功能新增
+
+- **数据源选择器**：控制台新增数据源下拉选择功能，支持两种数据源实时切换
+  - **中国地震台网发布最新地震信息**：`wss://ws-api.wolfx.jp/cenc_eqlist` / `https://api.wolfx.jp/cenc_eqlist.json`（旧 NoX 信封格式）
+  - **中国地震台网实时地震预警**：`wss://ws-api.wolfx.jp/cenc_eew` / `https://api.wolfx.jp/cenc_eew.json`（新扁平单对象格式）
+- **数据源切换自动重连**：切换数据源后自动断开旧连接、清空去重表、重连新 WebSocket
+- **新数据源格式兼容**：新增扁平单对象 JSON 解析路径 `parseSingleEarthquakeRecord()`，支持 `OriginTime/HypoCenter/Magnitude` 等新字段名
+
+### 🔧 改进
+
+- `RuntimeConfigService`：新增 `dataSource` 字段 + 预存数据源 URL 映射（`availableDataSources`），切换时自动联动 WS/REST URL
+- `EarthquakeController`：PUT/GET `/config` 支持 `dataSource` 配置项 + 单个 key 读写
+- `WebSocketClientService`：新增 `reconnect()` 方法（断开→清空去重表/记录缓存→重连），替代原 `switchPrimaryChannel()` 的局部行为
+- 控制台 UI：连接配置卡片顶部新增数据源选择下拉框，蓝色提示框显示当前数据源名称，切换时自动填充 URL 并保存
+
+---
+
 ## v5.6.1 (2026-07-08)
 
 ### 🐛 Bug 修复

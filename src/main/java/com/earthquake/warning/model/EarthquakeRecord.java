@@ -1,5 +1,6 @@
 package com.earthquake.warning.model;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
@@ -43,36 +44,45 @@ public class EarthquakeRecord {
     @JsonProperty("type")
     private String reportType;
 
-    /** 地震事件 ID */
+    /** 地震事件 ID（支持 ID / EventID / eventId） */
     @JsonProperty("EventID")
+    @JsonAlias({"ID", "eventId"})
     private String eventId;
 
-    /** 发震时间（UTC+8） */
+    /** 发震时间（UTC+8，支持 time / OriginTime） */
+    @JsonAlias("OriginTime")
     private String time;
 
     /** 报告时间（UTC+8） */
     @JsonProperty("ReportTime")
     private String reportTime;
 
-    /** 震中位置描述 */
+    /** 震中位置描述（支持 location / HypoCenter） */
+    @JsonAlias("HypoCenter")
     private String location;
 
-    /** 震中地名 */
+    /** 震中地名（支持 placeName / HypoCenter） */
+    @JsonAlias("HypoCenter")
     private String placeName;
 
-    /** 震级 */
+    /** 震级（支持 magnitude / Magnitude） */
+    @JsonAlias("Magnitude")
     private String magnitude;
 
-    /** 震源深度（km） */
+    /** 震源深度（km，支持 depth / Depth） */
+    @JsonAlias("Depth")
     private String depth;
 
-    /** 震中纬度 */
+    /** 震中纬度（支持 latitude / Latitude） */
+    @JsonAlias("Latitude")
     private String latitude;
 
-    /** 震中经度 */
+    /** 震中经度（支持 longitude / Longitude） */
+    @JsonAlias("Longitude")
     private String longitude;
 
-    /** 最大烈度 */
+    /** 最大烈度（支持 intensity / MaxIntensity） */
+    @JsonAlias("MaxIntensity")
     private String intensity;
 
     // ==== 计算字段 ====

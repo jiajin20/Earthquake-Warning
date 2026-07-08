@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>地震预警控制台 v5.6</title>
+<title>地震预警控制台 v5.7</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--bg:#f0f2f5;--card:#fff;--text:#1a1a2e;--sub:#888;--border:#e5e7eb;--blue:#0f3460;--green:#10b981;--red:#ef4444;--amber:#f59e0b;--radius:10px}
@@ -120,7 +120,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Micr
 <body>
 
 <div class="header">
-  <h1>🌍 地震预警控制台 <span class="v">v5.6</span></h1>
+  <h1>🌍 地震预警控制台 <span class="v">v5.7</span></h1>
   <div class="right">
     <span><span class="status-dot" id="wsDot"></span><span id="wsText">检查中...</span></span>
     <span style="font-size:12px;color:#94a3b8" id="lastData"></span>
@@ -134,12 +134,23 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Micr
 
 <div class="main">
 
-  <!-- ===== 连接配置 ===== -->
+  <!-- ===== 数据源选择 + WebSocket 连接配置 ===== -->
   <div class="card">
-    <div class="card-head"><h2>🔗 WebSocket 连接配置</h2><button class="btn btn-primary btn-xs" onclick="saveSection('connection')">保存</button></div>
+    <div class="card-head"><h2>🔗 数据源 & WebSocket 配置</h2><button class="btn btn-primary btn-xs" onclick="saveSection('connection')">保存</button></div>
     <div class="card-body" id="connFields">
-      <div class="f-row"><label>WS 地址</label><input id="cfg_websocketUrl" style="flex:1"><span class="v-unit"></span></div>
-      <div class="f-row"><label>REST API</label><input id="cfg_restApiUrl" style="flex:1"></div>
+      <div style="background:#f0f7ff;border:1px solid #bfdbfe;border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#1e40af">
+        ⚡ <b>切换数据源</b>：选择数据源后将自动更新下方的 WS 地址和 REST API 地址，并自动重连。
+      </div>
+      <div class="f-row"><label>数据源</label>
+        <select id="cfg_dataSource" onchange="onDataSourceChange()">
+          <option value="cenc_eqlist">中国地震台网发布最新地震信息</option>
+          <option value="cenc_eew">中国地震台网实时地震预警</option>
+        </select>
+        <span class="hint" id="dsHint"></span>
+      </div>
+      <div style="border-top:1px solid var(--border);margin:6px 0"></div>
+      <div class="f-row"><label>WS 地址</label><input id="cfg_websocketUrl" style="flex:1" readonly><span class="v-unit"></span></div>
+      <div class="f-row"><label>REST API</label><input id="cfg_restApiUrl" style="flex:1" readonly></div>
       <div class="f-row"><label>轮询间隔</label><input id="cfg_pollingIntervalMs" type="number" style="width:80px"><span class="v-unit">ms</span><span class="hint">断线时 HTTP 轮询频率</span></div>
       <div class="f-row"><label>重连间隔</label><input id="cfg_reconnectInterval" type="number" style="width:80px"><span class="v-unit">秒</span></div>
       <div class="f-row"><label>自动连接</label><input id="cfg_autoConnect" type="checkbox"><span class="hint">启动时自动建立 WS 连接</span></div>
@@ -384,6 +395,7 @@ async function loadConfig() {
 
   // 连接配置
   if (data.connection) {
+    setVal('cfg_dataSource', data.connection.dataSource || 'cenc_eqlist');
     setVal('cfg_websocketUrl', data.connection.websocketUrl || '');
     setVal('cfg_restApiUrl', data.connection.restApiUrl || '');
     setVal('cfg_pollingIntervalMs', data.connection.pollingIntervalMs);
@@ -393,6 +405,7 @@ async function loadConfig() {
     setCheck('cfg_proxyEnabled', data.connection.proxyEnabled);
     setVal('cfg_proxyHost', data.connection.proxyHost || '');
     setVal('cfg_proxyPort', data.connection.proxyPort);
+    updateDsHint(data.connection.dataSource);
   }
 
   // Bark 全局
@@ -422,6 +435,7 @@ function getCheck(id) { const el = document.getElementById(id); return el ? el.c
 async function saveSection(section) {
   const body = {};
   if (section === 'connection') {
+    body.dataSource = getVal('cfg_dataSource');
     body.websocketUrl = getVal('cfg_websocketUrl');
     body.restApiUrl = getVal('cfg_restApiUrl');
     body.pollingIntervalMs = getVal('cfg_pollingIntervalMs');
@@ -440,7 +454,46 @@ async function saveSection(section) {
     body.detailPageBaseUrl = getVal('cfg_barkDetailPageBaseUrl');
   }
   const data = await api(API + '/config', { method:'PUT', body:JSON.stringify(body) });
-  if (data) toast('配置已保存 ✓');
+  if (data) {
+    toast('配置已保存 ✓');
+    // 更新数据源提示
+    if (data.connection) updateDsHint(data.connection.dataSource);
+  }
+}
+
+// 数据源 URL 预设
+const DS_PRESETS = {
+  'cenc_eqlist': {
+    wsUrl: 'wss://ws-api.wolfx.jp/cenc_eqlist',
+    restUrl: 'https://api.wolfx.jp/cenc_eqlist.json',
+    name: '中国地震台网发布最新地震信息'
+  },
+  'cenc_eew': {
+    wsUrl: 'wss://ws-api.wolfx.jp/cenc_eew',
+    restUrl: 'https://api.wolfx.jp/cenc_eew.json',
+    name: '中国地震台网实时地震预警'
+  }
+};
+
+function onDataSourceChange() {
+  const ds = getVal('cfg_dataSource');
+  const preset = DS_PRESETS[ds];
+  if (preset) {
+    setVal('cfg_websocketUrl', preset.wsUrl);
+    setVal('cfg_restApiUrl', preset.restUrl);
+    updateDsHint(ds);
+    // 自动保存并触发重连
+    saveSection('connection');
+  }
+}
+
+function updateDsHint(ds) {
+  const el = document.getElementById('dsHint');
+  if (!el) return;
+  const preset = DS_PRESETS[ds];
+  if (!preset) { el.textContent = ''; return; }
+  const format = ds === 'cenc_eqlist' ? 'No1-No50 Map 格式' : '扁平单对象格式';
+  el.textContent = '← 当前：' + preset.name + '（' + format + '）';
 }
 
 async function saveWarning() {
@@ -464,7 +517,7 @@ function updateButtonLabels(channel) {
 }
 
 async function testBark() {
-  const data = await api(API + '/bark/test?message=地震预警控制台 v5.6 测试推送', {method:'POST'});
+  const data = await api(API + '/bark/test?message=地震预警控制台 v5.7 测试推送', {method:'POST'});
   if (data && data.success) toast('已推送到 ' + data.deviceCount + ' 个设备 ✓');
   else toast('推送失败', 'err');
 }

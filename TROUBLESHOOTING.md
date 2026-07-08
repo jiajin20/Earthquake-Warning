@@ -65,7 +65,7 @@ java -Dmaven.multiModuleProjectDirectory=. -cp .mvn/wrapper/maven-wrapper.jar or
 ```python
 import paramiko
 
-transport = paramiko.Transport(('YOUR_SERVER_IP', 22))
+transport = paramiko.Transport(('服务器IP', 22))
 transport.connect(username='root', password='password')
 
 sftp = paramiko.SFTPClient.from_transport(transport)
